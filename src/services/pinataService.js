@@ -1,4 +1,4 @@
-const pinataSDK = require('pinata');
+const { PinataSDK } = require("pinata");
 
 class PinataService {
   constructor() {
@@ -8,7 +8,7 @@ class PinataService {
       return;
     }
     
-    this.pinata = new pinataSDK({ pinataJWTKey: process.env.PINATA_JWT });
+    this.pinata = new PinataSDK({ pinataJwt: process.env.PINATA_JWT });
     this.testConnection();
   }
   
@@ -27,7 +27,7 @@ class PinataService {
         throw new Error('Pinata not configured');
       }
       
-      const options = {
+    const options = {
         pinataMetadata: {
           name: fileName,
           keyvalues: {
@@ -39,13 +39,16 @@ class PinataService {
           cidVersion: 0
         }
       };
-      
-      const result = await this.pinata.upload.public.file(fileBuffer, options);
-      
+
+      const blob = new Blob([fileBuffer]);
+      const file = new File([blob], fileName);
+
+      const uploadData = await this.pinata.upload.public.file(file, options);
+
       return {
-        ipfsHash: result.IpfsHash,
-        pinSize: result.PinSize,
-        timestamp: result.Timestamp
+        ipfsHash: uploadData.cid,
+        pinSize: uploadData.size,
+        timestamp: uploadData.created_at
       };
       
     } catch (error) {
@@ -64,7 +67,7 @@ class PinataService {
         throw new Error('Pinata not configured');
       }
       
-      await this.pinata.files.public.delete(ipfsHash);
+      await this.pinata.files.public.delete([ipfsHash]);
       return true;
     } catch (error) {
       console.error('Pinata delete error:', error);

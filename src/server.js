@@ -1,7 +1,7 @@
 require('dotenv').config();
 const express = require('express');
 const cors = require('cors');
-const helmet = request('helmet');
+const helmet = require('helmet');
 
 const app = express();
 
@@ -37,9 +37,9 @@ app.get('/health', (req, res) => {
   });
 });
 
-// API routes (TODO)
+// API routes
 // app.use('/api/auth', require('./routes/auth'));
-// app.use('/api/ipfs', require('./routes/ipfs'));
+app.use('/api/ipfs', require('./routes/ipfs'));
 
 // Error handling
 
