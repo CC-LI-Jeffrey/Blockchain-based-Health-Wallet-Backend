@@ -42,6 +42,7 @@ app.get('/health', (req, res) => {
 app.use('/api/ipfs', require('./routes/ipfs'));
 app.use('/api/test', require('./routes/test'));
 app.use('/api/health', require('./routes/health'));
+app.use('/api/records', require('./routes/healthRecords'));
 
 // Error handling
 
