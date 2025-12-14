@@ -17,13 +17,14 @@ class BlockchainService {
     console.log('Connected to blockchain:', networkType);
 
     // ============================================
-    // STEP 2: Initialize Backend Wallet
+    // STEP 2: Initialize Admin Wallet (for admin operations only)
     // ============================================
-    if (process.env.PRIVATE_KEY) {
-      this.wallet = new ethers.Wallet(process.env.PRIVATE_KEY, this.provider);
-      console.log('Wallet initialized:', this.wallet.address);
+    if (process.env.ADMIN_PRIVATE_KEY || process.env.PRIVATE_KEY) {
+      const adminKey = process.env.ADMIN_PRIVATE_KEY || process.env.PRIVATE_KEY;
+      this.adminWallet = new ethers.Wallet(adminKey, this.provider);
+      console.log('Admin wallet initialized:', this.adminWallet.address);
     } else {
-      console.warn('No PRIVATE_KEY found. Write operations will fail.');
+      console.warn('No ADMIN_PRIVATE_KEY found. Admin operations will fail.');
     }
 
     // ============================================
@@ -112,15 +113,25 @@ class BlockchainService {
     // ============================================
     // STEP 5: Initialize Contract Instance
     // ============================================
-    if (this.contractAddress && this.wallet) {
+    if (this.contractAddress) {
+      // Read-only contract (no signer needed for view functions)
       this.contract = new ethers.Contract(
         this.contractAddress,
         this.contractABI,
-        this.wallet
+        this.provider
       );
-      console.log('HealthWallet contract initialized:', this.contractAddress);
+      
+      // Admin contract (for admin operations)
+      if (this.adminWallet) {
+        this.adminContract = new ethers.Contract(
+          this.contractAddress,
+          this.contractABI,
+          this.adminWallet
+        );
+        console.log('HealthWallet contract initialized:', this.contractAddress);
+      }
     } else {
-      console.warn('Contract not initialized. Check CONTRACT_ADDRESS and PRIVATE_KEY in .env');
+      console.warn('Contract not initialized. Check CONTRACT_ADDRESS in .env');
     }
   }
 
@@ -145,7 +156,8 @@ class BlockchainService {
         encryptedKey: encryptedKey.substring(0, 20) + '...'
       });
 
-      const tx = await this.contract.addRecord(ipfsHash, recordType, encryptedKey);
+      const contract = this._getContract(false); // User operation (testing only)
+      const tx = await contract.addRecord(ipfsHash, recordType, encryptedKey);
       console.log('Transaction sent:', tx.hash);
       
       const receipt = await tx.wait();
@@ -527,7 +539,8 @@ class BlockchainService {
       
       console.log('Authorizing provider:', providerAddress);
 
-      const tx = await this.contract.authorizeProvider(providerAddress);
+      const contract = this._getContract(true); // Admin only
+      const tx = await contract.authorizeProvider(providerAddress);
       console.log('Transaction sent:', tx.hash);
       
       const receipt = await tx.wait();
@@ -557,7 +570,8 @@ class BlockchainService {
       
       console.log('Revoking provider authorization:', providerAddress);
 
-      const tx = await this.contract.revokeProviderAuthorization(providerAddress);
+      const contract = this._getContract(true); // Admin only
+      const tx = await contract.revokeProviderAuthorization(providerAddress);
       console.log('Transaction sent:', tx.hash);
       
       const receipt = await tx.wait();
@@ -750,7 +764,7 @@ class BlockchainService {
    */
   async getBalance(address = null) {
     try {
-      const targetAddress = address || this.wallet?.address;
+      const targetAddress = address || this.adminWallet?.address;
       
       if (!targetAddress) {
         throw new Error('No wallet address available');
@@ -834,8 +848,32 @@ class BlockchainService {
    */
   _ensureContract() {
     if (!this.contract) {
-      throw new Error('Contract not initialized. Check CONTRACT_ADDRESS and PRIVATE_KEY in .env');
+      throw new Error('Contract not initialized. Check CONTRACT_ADDRESS in .env');
     }
+  }
+
+  /**
+   * Get contract instance with appropriate signer
+   * @private
+   * @param {boolean} requiresAdmin - Whether this operation requires admin privileges
+   * @returns {ethers.Contract} Contract instance with correct signer
+   */
+  _getContract(requiresAdmin = false) {
+    if (requiresAdmin) {
+      if (!this.adminContract) {
+        throw new Error('Admin operations require ADMIN_PRIVATE_KEY in .env');
+      }
+      return this.adminContract;
+    }
+    
+    // For testing: use admin wallet if available
+    // For production: this should throw an error, forcing frontend to sign
+    if (this.adminContract) {
+      console.warn('⚠️  Using backend wallet for user operation. This is ONLY for testing!');
+      return this.adminContract;
+    }
+    
+    throw new Error('User operations must be signed by the user wallet (frontend)');
   }
 
   /**

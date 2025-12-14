@@ -33,8 +33,10 @@ const upload = multer({
 
 /**
  * @route   POST /api/ipfs/upload
- * @desc    Upload a file to IPFS via Pinata
- * @access  Public (you can add authentication middleware later)
+ * @desc    Upload an encrypted file to IPFS via Pinata
+ * @access  Public
+ * @note    Files should be encrypted client-side before upload.
+ *          Backend cannot decrypt these files - only stores them on IPFS.
  */
 router.post('/upload', upload.single('file'), async (req, res) => {
   try {
@@ -44,16 +46,21 @@ router.post('/upload', upload.single('file'), async (req, res) => {
         error: 'No file provided'
       });
     }
+    
+    console.log(`Uploading encrypted file: ${req.file.originalname} (${req.file.size} bytes)`);
 
     // Extract metadata from request body
     const metadata = {
       originalName: req.file.originalname,
       mimeType: req.file.mimetype,
       size: req.file.size,
+      encrypted: true, // Mark as encrypted
+      uploadedAt: new Date().toISOString(),
       ...(req.body.metadata && JSON.parse(req.body.metadata))
     };
 
-    // Upload to IPFS
+    // Upload encrypted file to IPFS
+    // Note: Backend cannot decrypt this file - it only stores it
     const result = await pinataService.uploadFile(
       req.file.buffer,
       req.file.originalname,
@@ -62,21 +69,16 @@ router.post('/upload', upload.single('file'), async (req, res) => {
 
     // Get the gateway URL
     const fileUrl = pinataService.getFileUrl(result.ipfsHash);
+    
+    console.log(`File uploaded successfully. IPFS Hash: ${result.ipfsHash}`);
 
     res.json({
       success: true,
-      message: 'File uploaded successfully',
-      data: {
-        ipfsHash: result.ipfsHash,
-        fileUrl: fileUrl,
-        pinSize: result.pinSize,
-        timestamp: result.timestamp,
-        metadata: {
-          fileName: req.file.originalname,
-          mimeType: req.file.mimetype,
-          size: req.file.size
-        }
-      }
+      message: 'Encrypted file uploaded successfully to IPFS',
+      ipfsHash: result.ipfsHash,
+      fileUrl: fileUrl,
+      pinSize: result.pinSize,
+      timestamp: result.timestamp
     });
 
   } catch (error) {
