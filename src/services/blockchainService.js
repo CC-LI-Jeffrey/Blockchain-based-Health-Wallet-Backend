@@ -1,113 +1,166 @@
 const { ethers } = require('ethers');
 
 /**
- * Blockchain Service for HealthWallet Smart Contract
+ * Blockchain Service for HealthWalletV2 Smart Contract
  * Handles all smart contract interactions using Ethers.js v6
- * Supports health records, access control, provider authorization, and audit logging
+ * Supports personal info, medications, vaccinations, reports, data sharing, and access logs
+ * 
+ * CONTRACT: HealthWalletV2 (Privacy-focused with per-category encryption)
+ * NETWORK: Sepolia Testnet
  */
 class BlockchainService {
   constructor() {
     // ============================================
     // STEP 1: Connect to Blockchain Network
     // ============================================
-    const rpcUrl = process.env.RPC_URL || 'https://polygon-amoy.g.alchemy.com/v2/demo';
+    const rpcUrl = process.env.RPC_URL || 'https://sepolia.infura.io/v3/9aa3d95b3bc440fa88ea12eaa4456161';
     this.provider = new ethers.JsonRpcProvider(rpcUrl);
     
-    const networkType = rpcUrl.includes('127.0.0.1') ? 'Local Ganache' : 'Polygon Amoy Testnet';
-    console.log('Connected to blockchain:', networkType);
+    const networkType = rpcUrl.includes('127.0.0.1') ? 'Local' : 
+                       rpcUrl.includes('sepolia') ? 'Sepolia Testnet' :
+                       rpcUrl.includes('amoy') ? 'Polygon Amoy' : 'Unknown';
+    console.log('✓ Connected to blockchain:', networkType);
 
     // ============================================
-    // STEP 2: Initialize Admin Wallet (for admin operations only)
+    // STEP 2: Initialize Admin Wallet (OPTIONAL - for role management only)
     // ============================================
-    if (process.env.ADMIN_PRIVATE_KEY || process.env.PRIVATE_KEY) {
-      const adminKey = process.env.ADMIN_PRIVATE_KEY || process.env.PRIVATE_KEY;
-      this.adminWallet = new ethers.Wallet(adminKey, this.provider);
-      console.log('Admin wallet initialized:', this.adminWallet.address);
+    if (process.env.ADMIN_PRIVATE_KEY && process.env.ADMIN_PRIVATE_KEY.length > 10) {
+      this.adminWallet = new ethers.Wallet(process.env.ADMIN_PRIVATE_KEY, this.provider);
+      console.log('✓ Admin wallet initialized:', this.adminWallet.address);
     } else {
-      console.warn('No ADMIN_PRIVATE_KEY found. Admin operations will fail.');
+      console.log('ℹ Admin wallet not configured (read-only mode)');
     }
 
     // ============================================
     // STEP 3: Configure Smart Contract
     // ============================================
     this.contractAddress = process.env.CONTRACT_ADDRESS;
+    console.log('✓ Contract address:', this.contractAddress);
     
     /**
-     * HealthWallet Contract ABI
-     * Matches the deployed contract structure
+     * HealthWalletV2 Contract ABI
+     * Privacy-focused contract with per-category encryption
      */
     this.contractABI = [
-      // Health Record Management
-      "function addRecord(string memory _ipfsHash, uint8 _recordType, string memory _encryptedKey) public returns (uint256)",
-      "function addRecordByProvider(address _patientAddress, string memory _ipfsHash, uint8 _recordType, string memory _encryptedKey) public returns (uint256)",
-      "function getRecord(uint256 _recordId) public view returns (tuple(uint256 recordId, address patientAddress, string ipfsHash, uint8 recordType, uint256 timestamp, address issuedBy, bool isActive, string encryptedKey, uint256 version))",
-      "function updateRecord(uint256 _recordId, string memory _newIpfsHash, string memory _newEncryptedKey) public",
-      "function deleteRecord(uint256 _recordId) public",
-      "function getPatientRecords(address _patient) public view returns (uint256[] memory)",
-      "function getTotalRecords() public view returns (uint256)",
+      // Personal Info Functions
+      "function setPersonalInfo(string _encryptedDataIpfsHash, bytes32 _publicKeyHash) external",
+      "function getPersonalInfoRef(address _user) external view returns (tuple(string encryptedDataIpfsHash, bytes32 publicKeyHash, uint256 createdAt, uint256 lastUpdated, bool exists))",
+      "function hasPersonalInfo(address _user) external view returns (bool)",
       
-      // Access Control (different signature - takes array and duration)
-      "function grantAccess(address _grantee, uint256[] memory _recordIds, uint256 _durationInDays) public",
-      "function revokeAccess(address _grantee) public",
-      "function hasAccess(address _patient, address _requester, uint256 _recordId) public view returns (bool)",
-      "function getAccessGrant(address _patient, address _grantee) public view returns (tuple(address grantedTo, uint256[] recordIds, uint256 expiryTime, bool isActive, uint256 grantedAt))",
+      // Medication Functions
+      "function addMedication(string _encryptedDataIpfsHash, bool _isActive, uint256 _startDate, uint256 _endDate) external returns (uint256)",
+      "function updateMedication(uint256 _medicationId, string _encryptedDataIpfsHash, bool _isActive, uint256 _startDate, uint256 _endDate) external",
+      "function getMedicationIds(address _user) external view returns (uint256[])",
+      "function getMedicationRef(uint256 _medicationId) external view returns (tuple(uint256 id, string encryptedDataIpfsHash, bool isActive, uint256 startDate, uint256 endDate, uint256 createdAt))",
       
-      // Provider Authorization (Admin only)
-      "function authorizeProvider(address _provider) public",
-      "function revokeProviderAuthorization(address _provider) public",
-      "function isAuthorizedProvider(address _provider) public view returns (bool)",
+      // Vaccination Functions
+      "function addVaccination(string _encryptedDataIpfsHash, string _encryptedCertificateIpfsHash, uint256 _vaccinationDate) external returns (uint256)",
+      "function updateVaccination(uint256 _vaccinationId, string _encryptedDataIpfsHash, string _encryptedCertificateIpfsHash, uint256 _vaccinationDate) external",
+      "function getVaccinationIds(address _user) external view returns (uint256[])",
+      "function getVaccinationRef(uint256 _vaccinationId) external view returns (tuple(uint256 id, string encryptedDataIpfsHash, string encryptedCertificateIpfsHash, uint256 vaccinationDate, uint256 createdAt))",
       
-      // Emergency Contact (public mapping)
-      "function setEmergencyContact(address _emergencyContact) public",
-      "function emergencyContact(address) public view returns (address)",
+      // Medical Report Functions
+      "function addReport(string _encryptedDataIpfsHash, string _encryptedFileIpfsHash, uint8 _reportType, bool _hasFile, uint256 _reportDate) external returns (uint256)",
+      "function updateReport(uint256 _reportId, string _encryptedDataIpfsHash, string _encryptedFileIpfsHash, uint8 _reportType, bool _hasFile, uint256 _reportDate) external",
+      "function getReportIds(address _user) external view returns (uint256[])",
+      "function getReportRef(uint256 _reportId) external view returns (tuple(uint256 id, string encryptedDataIpfsHash, string encryptedFileIpfsHash, uint8 reportType, bool hasFile, uint256 reportDate, uint256 createdAt))",
       
-      // Audit Logging
-      "function logAccess(uint256 _recordId, uint8 _action) public",
-      "function getAuditLogs(uint256 _recordId) public view returns (tuple(address accessor, uint256 timestamp, uint8 action)[] memory)",
+      // Data Sharing Functions
+      "function shareData(address _recipientAddress, bytes32 _recipientNameHash, string _encryptedRecipientDataIpfsHash, uint8 _recipientType, uint8 _dataCategory, uint256 _expiryDate, uint8 _accessLevel, string _encryptedCategoryKey) external returns (uint256)",
+      "function revokeShare(uint256 _shareId) external",
+      "function getShareIds(address _user) external view returns (uint256[])",
+      "function getShareRecord(uint256 _shareId) external view returns (tuple(uint256 id, address recipientAddress, bytes32 recipientNameHash, string encryptedRecipientDataIpfsHash, uint8 recipientType, uint8 sharedDataCategory, uint256 shareDate, uint256 expiryDate, uint8 accessLevel, uint8 status, string encryptedCategoryKey))",
+      
+      // Access Logging Functions
+      "function logDataAccess(address _owner, string _encryptedDetailsIpfsHash, uint8 _accessedCategory, bytes32 _dataIntegrityHash) external returns (uint256)",
+      "function getAccessLogIds(address _user) external view returns (uint256[])",
+      "function getAccessLog(uint256 _logId) external view returns (tuple(uint256 id, address accessorAddress, string encryptedDetailsIpfsHash, uint8 accessedCategory, uint256 accessTime, bytes32 dataIntegrityHash))",
+      
+      // Emergency Contact
+      "function setEmergencyContact(address _emergencyContact) external",
+      "function getEmergencyContact(address _user) external view returns (address)",
+      
+      // Admin Functions (require DEFAULT_ADMIN_ROLE)
+      "function registerHealthcareProvider(address _provider) external",
+      "function registerHospital(address _hospital) external",
+      "function registerClinic(address _clinic) external",
+      "function registerInsurance(address _insurance) external",
+      "function registerAuditor(address _auditor) external",
+      "function revokeEntityRole(address _entity, bytes32 _role) external",
+      "function pause() external",
+      "function unpause() external",
+      
+      // Utility Functions
+      "function getTotalCounts() external view returns (uint256 medications, uint256 vaccinations, uint256 reports, uint256 shares, uint256 totalAccessLogs)",
       
       // OpenZeppelin AccessControl
       "function hasRole(bytes32 role, address account) external view returns (bool)",
-      "function getRoleAdmin(bytes32 role) external view returns (bytes32)",
-      "function grantRole(bytes32 role, address account) external",
-      "function revokeRole(bytes32 role, address account) external",
-      "function renounceRole(bytes32 role, address account) external",
+      "function DEFAULT_ADMIN_ROLE() external pure returns (bytes32)",
+      "function HEALTHCARE_PROVIDER_ROLE() external pure returns (bytes32)",
+      "function HOSPITAL_ROLE() external pure returns (bytes32)",
+      "function CLINIC_ROLE() external pure returns (bytes32)",
+      "function INSURANCE_ROLE() external pure returns (bytes32)",
+      "function AUDITOR_ROLE() external pure returns (bytes32)",
       
       // OpenZeppelin Ownable
       "function owner() external view returns (address)",
-      "function transferOwnership(address newOwner) external",
-      "function renounceOwnership() external",
-      
-      // Role Constants
-      "function DEFAULT_ADMIN_ROLE() external pure returns (bytes32)",
-      "function PROVIDER_ROLE() external pure returns (bytes32)",
       
       // Events
-      "event RecordAdded(uint256 indexed recordId, address indexed patient, string ipfsHash, uint8 recordType)",
-      "event RecordUpdated(uint256 indexed recordId, string newIpfsHash, uint256 version)",
-      "event AccessGranted(address indexed patient, address indexed grantedTo, uint256 expiryTime)",
-      "event AccessRevoked(address indexed patient, address indexed revokedFrom)",
-      "event RecordAccessed(uint256 indexed recordId, address indexed accessor, uint256 timestamp)",
-      "event EmergencyAccessUsed(address indexed patient, address indexed emergencyContact, uint256 timestamp)"
+      "event PersonalInfoStored(address indexed user, string ipfsHash, uint256 timestamp)",
+      "event PersonalInfoUpdated(address indexed user, string ipfsHash, uint256 timestamp)",
+      "event MedicationAdded(address indexed user, uint256 indexed medicationId, string ipfsHash)",
+      "event MedicationUpdated(address indexed user, uint256 indexed medicationId, string ipfsHash)",
+      "event VaccinationAdded(address indexed user, uint256 indexed vaccinationId, string ipfsHash)",
+      "event VaccinationUpdated(address indexed user, uint256 indexed vaccinationId, string ipfsHash)",
+      "event ReportAdded(address indexed user, uint256 indexed reportId, uint8 reportType, string ipfsHash)",
+      "event ReportUpdated(address indexed user, uint256 indexed reportId, string ipfsHash)",
+      "event DataShared(address indexed owner, address indexed recipient, uint256 indexed shareId, uint8 category, uint256 expiryDate)",
+      "event ShareRevoked(address indexed owner, uint256 indexed shareId)",
+      "event DataAccessed(address indexed owner, address indexed accessor, uint256 indexed logId, uint8 category, uint256 timestamp)"
     ];
 
     // ============================================
     // STEP 4: Define Enums (matching Solidity)
     // ============================================
-    this.RecordType = {
-      LAB_REPORT: 0,
-      PRESCRIPTION: 1,
-      MEDICAL_IMAGE: 2,
-      DIAGNOSIS: 3,
-      VACCINATION: 4,
-      VISIT_SUMMARY: 5
+    this.DataCategory = {
+      PERSONAL_INFO: 0,
+      MEDICATION_RECORDS: 1,
+      VACCINATION_RECORDS: 2,
+      MEDICAL_REPORTS: 3,
+      ALL_DATA: 4
     };
 
-    this.AuditAction = {
-      VIEW: 0,
-      DOWNLOAD: 1,
-      SHARE: 2,
-      UPDATE: 3,
-      DELETE: 4
+    this.ReportType = {
+      LAB_RESULT: 0,
+      DOCTOR_NOTE: 1,
+      PRESCRIPTION: 2,
+      IMAGING: 3,
+      PATHOLOGY: 4,
+      CONSULTATION: 5,
+      DISCHARGE_SUMMARY: 6,
+      OTHER: 7
+    };
+
+    this.RecipientType = {
+      DOCTOR: 0,
+      HOSPITAL: 1,
+      CLINIC: 2,
+      INSURANCE_COMPANY: 3,
+      PHARMACY: 4,
+      LABORATORY: 5,
+      OTHER: 6
+    };
+
+    this.AccessLevel = {
+      VIEW_ONLY: 0,
+      FULL_ACCESS: 1,
+      EMERGENCY_ONLY: 2
+    };
+
+    this.ShareStatus = {
+      ACTIVE: 0,
+      EXPIRED: 1,
+      REVOKED: 2
     };
 
     // ============================================
@@ -120,616 +173,215 @@ class BlockchainService {
         this.contractABI,
         this.provider
       );
+      console.log('✓ HealthWalletV2 contract initialized (read-only)');
       
-      // Admin contract (for admin operations)
+      // Admin contract (for admin operations - optional)
       if (this.adminWallet) {
         this.adminContract = new ethers.Contract(
           this.contractAddress,
           this.contractABI,
           this.adminWallet
         );
-        console.log('HealthWallet contract initialized:', this.contractAddress);
+        console.log('✓ Admin contract initialized for role management');
       }
     } else {
-      console.warn('Contract not initialized. Check CONTRACT_ADDRESS in .env');
+      console.warn('⚠ Contract not initialized. Check CONTRACT_ADDRESS in .env');
     }
   }
 
   // ============================================
-  // HEALTH RECORD METHODS
+  // VIEW FUNCTIONS (Read-only - No gas fees)
+  // Backend reads blockchain data
+  // User transactions signed in Android app
   // ============================================
 
-  /**
-   * Add a health record (patient adds their own record)
-   * @param {string} ipfsHash - IPFS hash of encrypted record
-   * @param {number} recordType - Record type (0-5)
-   * @param {string} encryptedKey - Encrypted symmetric key
-   * @returns {Object} Transaction result with record ID
-   */
-  async addRecord(ipfsHash, recordType, encryptedKey) {
+  async hasPersonalInfo(userAddress) {
     try {
       this._ensureContract();
-      
-      console.log('Adding health record:', {
-        ipfsHash,
-        recordType: this._getRecordTypeName(recordType),
-        encryptedKey: encryptedKey.substring(0, 20) + '...'
-      });
+      return await this.contract.hasPersonalInfo(userAddress);
+    } catch (error) {
+      throw new Error(`Failed to check personal info: ${error.message}`);
+    }
+  }
 
-      const contract = this._getContract(false); // User operation (testing only)
-      const tx = await contract.addRecord(ipfsHash, recordType, encryptedKey);
-      console.log('Transaction sent:', tx.hash);
-      
-      const receipt = await tx.wait();
-      console.log('Transaction confirmed in block:', receipt.blockNumber);
-
-      // Extract RecordAdded event to get the record ID
-      const event = receipt.logs.find(log => {
-        try {
-          const parsed = this.contract.interface.parseLog(log);
-          return parsed.name === 'RecordAdded';
-        } catch {
-          return false;
-        }
-      });
-
-      let recordId = null;
-      if (event) {
-        const parsed = this.contract.interface.parseLog(event);
-        recordId = Number(parsed.args.recordId);
-        console.log('Record added with ID:', recordId);
-      }
-
+  async getPersonalInfoRef(userAddress) {
+    try {
+      this._ensureContract();
+      const info = await this.contract.getPersonalInfoRef(userAddress);
       return {
-        success: true,
-        recordId,
-        hash: receipt.hash,
-        blockNumber: receipt.blockNumber,
-        gasUsed: receipt.gasUsed.toString()
+        encryptedDataIpfsHash: info.encryptedDataIpfsHash,
+        publicKeyHash: info.publicKeyHash,
+        createdAt: Number(info.createdAt),
+        lastUpdated: Number(info.lastUpdated),
+        exists: info.exists
       };
-
     } catch (error) {
-      console.error('Add record failed:', error.message);
-      throw new Error(`Failed to add record: ${error.message}`);
+      throw new Error(`Failed to get personal info: ${error.message}`);
     }
   }
 
-  /**
-   * Add a health record on behalf of a patient (provider only)
-   * @param {string} patientAddress - Patient's wallet address
-   * @param {string} ipfsHash - IPFS hash of encrypted record
-   * @param {number} recordType - Record type (0-5)
-   * @param {string} encryptedKey - Encrypted symmetric key
-   * @returns {Object} Transaction result with record ID
-   */
-  async addRecordByProvider(patientAddress, ipfsHash, recordType, encryptedKey) {
+  async getMedicationIds(userAddress) {
     try {
       this._ensureContract();
-      
-      console.log('Provider adding record for patient:', {
-        patient: patientAddress,
-        ipfsHash,
-        recordType: this._getRecordTypeName(recordType)
-      });
+      const ids = await this.contract.getMedicationIds(userAddress);
+      return ids.map(id => Number(id));
+    } catch (error) {
+      throw new Error(`Failed to get medication IDs: ${error.message}`);
+    }
+  }
 
-      const tx = await this.contract.addRecordByProvider(
-        patientAddress,
-        ipfsHash,
-        recordType,
-        encryptedKey
-      );
-      console.log('Transaction sent:', tx.hash);
-      
-      const receipt = await tx.wait();
-      console.log('Transaction confirmed in block:', receipt.blockNumber);
-
-      const event = receipt.logs.find(log => {
-        try {
-          const parsed = this.contract.interface.parseLog(log);
-          return parsed.name === 'RecordAdded';
-        } catch {
-          return false;
-        }
-      });
-
-      let recordId = null;
-      if (event) {
-        const parsed = this.contract.interface.parseLog(event);
-        recordId = Number(parsed.args.recordId);
-        console.log('Record added with ID:', recordId);
-      }
-
+  async getMedicationRef(medicationId) {
+    try {
+      this._ensureContract();
+      const med = await this.contract.getMedicationRef(medicationId);
       return {
-        success: true,
-        recordId,
-        hash: receipt.hash,
-        blockNumber: receipt.blockNumber,
-        gasUsed: receipt.gasUsed.toString()
+        id: Number(med.id),
+        encryptedDataIpfsHash: med.encryptedDataIpfsHash,
+        isActive: med.isActive,
+        startDate: Number(med.startDate),
+        endDate: Number(med.endDate),
+        createdAt: Number(med.createdAt)
       };
-
     } catch (error) {
-      console.error('Add record by provider failed:', error.message);
-      throw new Error(`Failed to add record by provider: ${error.message}`);
+      throw new Error(`Failed to get medication: ${error.message}`);
     }
   }
 
-  /**
-   * Get a specific health record
-   * @param {number} recordId - Record ID
-   * @returns {Object} Record details
-   */
-  async getRecord(recordId) {
+  async getVaccinationIds(userAddress) {
     try {
       this._ensureContract();
-      
-      console.log('Fetching record:', recordId);
-      const record = await this.contract.getRecord(recordId);
-
-      const formattedRecord = {
-        recordId: Number(record.recordId),
-        patientAddress: record.patientAddress,
-        ipfsHash: record.ipfsHash,
-        recordType: Number(record.recordType),
-        recordTypeName: this._getRecordTypeName(Number(record.recordType)),
-        encryptedKey: record.encryptedKey,
-        timestamp: Number(record.timestamp),
-        timestampDate: new Date(Number(record.timestamp) * 1000).toISOString(),
-        issuedBy: record.issuedBy,
-        isActive: record.isActive,
-        version: Number(record.version)
-      };
-
-      console.log('Record retrieved:', formattedRecord.recordId);
-      return formattedRecord;
-
+      const ids = await this.contract.getVaccinationIds(userAddress);
+      return ids.map(id => Number(id));
     } catch (error) {
-      console.error('Get record failed:', error.message);
-      throw new Error(`Failed to get record: ${error.message}`);
+      throw new Error(`Failed to get vaccination IDs: ${error.message}`);
     }
   }
 
-  /**
-   * Update an existing health record
-   * @param {number} recordId - Record ID
-   * @param {string} newIpfsHash - New IPFS hash
-   * @param {string} newEncryptedKey - New encrypted key
-   * @returns {Object} Transaction result
-   */
-  async updateRecord(recordId, newIpfsHash, newEncryptedKey) {
+  async getVaccinationRef(vaccinationId) {
     try {
       this._ensureContract();
-      
-      console.log('Updating record:', recordId);
-
-      const tx = await this.contract.updateRecord(recordId, newIpfsHash, newEncryptedKey);
-      console.log('Transaction sent:', tx.hash);
-      
-      const receipt = await tx.wait();
-      console.log('Transaction confirmed in block:', receipt.blockNumber);
-
+      const vac = await this.contract.getVaccinationRef(vaccinationId);
       return {
-        success: true,
-        hash: receipt.hash,
-        blockNumber: receipt.blockNumber,
-        gasUsed: receipt.gasUsed.toString()
+        id: Number(vac.id),
+        encryptedDataIpfsHash: vac.encryptedDataIpfsHash,
+        encryptedCertificateIpfsHash: vac.encryptedCertificateIpfsHash,
+        vaccinationDate: Number(vac.vaccinationDate),
+        createdAt: Number(vac.createdAt)
       };
-
     } catch (error) {
-      console.error('Update record failed:', error.message);
-      throw new Error(`Failed to update record: ${error.message}`);
+      throw new Error(`Failed to get vaccination: ${error.message}`);
     }
   }
 
-  /**
-   * Delete a health record (soft delete)
-   * @param {number} recordId - Record ID
-   * @returns {Object} Transaction result
-   */
-  async deleteRecord(recordId) {
+  async getReportIds(userAddress) {
     try {
       this._ensureContract();
-      
-      console.log('Deleting record:', recordId);
+      const ids = await this.contract.getReportIds(userAddress);
+      return ids.map(id => Number(id));
+    } catch (error) {
+      throw new Error(`Failed to get report IDs: ${error.message}`);
+    }
+  }
 
-      const tx = await this.contract.deleteRecord(recordId);
-      console.log('Transaction sent:', tx.hash);
-      
-      const receipt = await tx.wait();
-      console.log('Transaction confirmed in block:', receipt.blockNumber);
-
+  async getReportRef(reportId) {
+    try {
+      this._ensureContract();
+      const report = await this.contract.getReportRef(reportId);
       return {
-        success: true,
-        hash: receipt.hash,
-        blockNumber: receipt.blockNumber,
-        gasUsed: receipt.gasUsed.toString()
+        id: Number(report.id),
+        encryptedDataIpfsHash: report.encryptedDataIpfsHash,
+        encryptedFileIpfsHash: report.encryptedFileIpfsHash,
+        reportType: Number(report.reportType),
+        hasFile: report.hasFile,
+        reportDate: Number(report.reportDate),
+        createdAt: Number(report.createdAt)
       };
-
     } catch (error) {
-      console.error('Delete record failed:', error.message);
-      throw new Error(`Failed to delete record: ${error.message}`);
+      throw new Error(`Failed to get report: ${error.message}`);
     }
   }
 
-  /**
-   * Get all record IDs for a patient
-   * @param {string} patientAddress - Patient's wallet address
-   * @returns {Array} Array of record IDs
-   */
-  async getPatientRecords(patientAddress) {
+  async getShareIds(userAddress) {
     try {
       this._ensureContract();
-      
-      // Validate address format
-      if (!ethers.isAddress(patientAddress)) {
-        throw new Error(`Invalid address format: ${patientAddress}. Must be a valid Ethereum address (0x...)`);
-      }
-      
-      console.log('Fetching records for patient:', patientAddress);
-      const recordIds = await this.contract.getPatientRecords(patientAddress);
-
-      const formattedIds = recordIds.map(id => Number(id));
-      console.log('Found records:', formattedIds.length);
-      
-      return formattedIds;
-
+      const ids = await this.contract.getShareIds(userAddress);
+      return ids.map(id => Number(id));
     } catch (error) {
-      console.error('Get patient records failed:', error.message);
-      throw new Error(`Failed to get patient records: ${error.message}`);
+      throw new Error(`Failed to get share IDs: ${error.message}`);
     }
   }
 
-  /**
-   * Get total number of records in the system
-   * @returns {number} Total record count
-   */
-  async getTotalRecords() {
+  async getShareRecord(shareId) {
     try {
       this._ensureContract();
-      
-      const total = await this.contract.getTotalRecords();
-      const count = Number(total);
-      
-      console.log('Total records:', count);
-      return count;
-
-    } catch (error) {
-      console.error('Get total records failed:', error.message);
-      throw new Error(`Failed to get total records: ${error.message}`);
-    }
-  }
-
-  // ============================================
-  // ACCESS CONTROL METHODS
-  // ============================================
-
-  /**
-   * Grant access to a provider for specific records
-   * @param {string} granteeAddress - Address to grant access to
-   * @param {Array} recordIds - Array of record IDs
-   * @param {number} durationInDays - Duration in days
-   * @returns {Object} Transaction result
-   */
-  async grantAccess(granteeAddress, recordIds, durationInDays) {
-    try {
-      this._ensureContract();
-      
-      console.log('Granting access:', {
-        grantee: granteeAddress,
-        recordIds,
-        durationInDays
-      });
-
-      const tx = await this.contract.grantAccess(granteeAddress, recordIds, durationInDays);
-      console.log('Transaction sent:', tx.hash);
-      
-      const receipt = await tx.wait();
-      console.log('Transaction confirmed in block:', receipt.blockNumber);
-
+      const share = await this.contract.getShareRecord(shareId);
       return {
-        success: true,
-        hash: receipt.hash,
-        blockNumber: receipt.blockNumber,
-        gasUsed: receipt.gasUsed.toString()
+        id: Number(share.id),
+        recipientAddress: share.recipientAddress,
+        recipientNameHash: share.recipientNameHash,
+        encryptedRecipientDataIpfsHash: share.encryptedRecipientDataIpfsHash,
+        recipientType: Number(share.recipientType),
+        sharedDataCategory: Number(share.sharedDataCategory),
+        shareDate: Number(share.shareDate),
+        expiryDate: Number(share.expiryDate),
+        accessLevel: Number(share.accessLevel),
+        status: Number(share.status),
+        encryptedCategoryKey: share.encryptedCategoryKey
       };
-
     } catch (error) {
-      console.error('Grant access failed:', error.message);
-      throw new Error(`Failed to grant access: ${error.message}`);
+      throw new Error(`Failed to get share record: ${error.message}`);
     }
   }
 
-  /**
-   * Revoke provider access
-   * @param {string} granteeAddress - Address to revoke access from
-   * @returns {Object} Transaction result
-   */
-  async revokeAccess(granteeAddress) {
+  async getAccessLogIds(userAddress) {
     try {
       this._ensureContract();
-      
-      console.log('Revoking access from:', granteeAddress);
+      const ids = await this.contract.getAccessLogIds(userAddress);
+      return ids.map(id => Number(id));
+    } catch (error) {
+      throw new Error(`Failed to get access log IDs: ${error.message}`);
+    }
+  }
 
-      const tx = await this.contract.revokeAccess(granteeAddress);
-      console.log('Transaction sent:', tx.hash);
-      
-      const receipt = await tx.wait();
-      console.log('Transaction confirmed in block:', receipt.blockNumber);
-
+  async getAccessLog(logId) {
+    try {
+      this._ensureContract();
+      const log = await this.contract.getAccessLog(logId);
       return {
-        success: true,
-        hash: receipt.hash,
-        blockNumber: receipt.blockNumber,
-        gasUsed: receipt.gasUsed.toString()
+        id: Number(log.id),
+        accessorAddress: log.accessorAddress,
+        encryptedDetailsIpfsHash: log.encryptedDetailsIpfsHash,
+        accessedCategory: Number(log.accessedCategory),
+        accessTime: Number(log.accessTime),
+        dataIntegrityHash: log.dataIntegrityHash
       };
-
     } catch (error) {
-      console.error('Revoke access failed:', error.message);
-      throw new Error(`Failed to revoke access: ${error.message}`);
+      throw new Error(`Failed to get access log: ${error.message}`);
     }
   }
 
-  /**
-   * Check if requester has access to a record
-   * @param {string} patientAddress - Patient's address
-   * @param {string} requesterAddress - Requester's address
-   * @param {number} recordId - Record ID
-   * @returns {boolean} True if requester has valid access
-   */
-  async hasAccess(patientAddress, requesterAddress, recordId) {
+  async getTotalCounts() {
     try {
       this._ensureContract();
-      
-      console.log('Checking access:', { patient: patientAddress, requester: requesterAddress, recordId });
-      const hasAccess = await this.contract.hasAccess(patientAddress, requesterAddress, recordId);
-      
-      console.log('Access granted:', hasAccess);
-      return hasAccess;
-
-    } catch (error) {
-      console.error('Check access failed:', error.message);
-      throw new Error(`Failed to check access: ${error.message}`);
-    }
-  }
-
-  /**
-   * Get access grant details
-   * @param {string} patientAddress - Patient's address
-   * @param {string} granteeAddress - Grantee's address
-   * @returns {Object} Access grant information
-   */
-  async getAccessGrant(patientAddress, granteeAddress) {
-    try {
-      this._ensureContract();
-      
-      console.log('Fetching access grant:', { patient: patientAddress, grantee: granteeAddress });
-      const grant = await this.contract.getAccessGrant(patientAddress, granteeAddress);
-
-      const formattedGrant = {
-        grantedTo: grant.grantedTo,
-        recordIds: grant.recordIds.map(id => Number(id)),
-        expiryTime: Number(grant.expiryTime),
-        expiryTimeDate: grant.expiryTime > 0 ? new Date(Number(grant.expiryTime) * 1000).toISOString() : null,
-        isActive: grant.isActive,
-        grantedAt: Number(grant.grantedAt),
-        grantedAtDate: grant.grantedAt > 0 ? new Date(Number(grant.grantedAt) * 1000).toISOString() : null,
-        isExpired: grant.isActive && Number(grant.expiryTime) < Math.floor(Date.now() / 1000)
-      };
-
-      console.log('Access grant retrieved');
-      return formattedGrant;
-
-    } catch (error) {
-      console.error('Get access grant failed:', error.message);
-      throw new Error(`Failed to get access grant: ${error.message}`);
-    }
-  }
-
-  // ============================================
-  // PROVIDER AUTHORIZATION METHODS (Admin Only)
-  // ============================================
-
-  /**
-   * Authorize a provider (grant PROVIDER_ROLE)
-   * @param {string} providerAddress - Provider's wallet address
-   * @returns {Object} Transaction result
-   */
-  async authorizeProvider(providerAddress) {
-    try {
-      this._ensureContract();
-      
-      console.log('Authorizing provider:', providerAddress);
-
-      const contract = this._getContract(true); // Admin only
-      const tx = await contract.authorizeProvider(providerAddress);
-      console.log('Transaction sent:', tx.hash);
-      
-      const receipt = await tx.wait();
-      console.log('Transaction confirmed in block:', receipt.blockNumber);
-
+      const counts = await this.contract.getTotalCounts();
       return {
-        success: true,
-        hash: receipt.hash,
-        blockNumber: receipt.blockNumber,
-        gasUsed: receipt.gasUsed.toString()
+        medications: Number(counts.medications),
+        vaccinations: Number(counts.vaccinations),
+        reports: Number(counts.reports),
+        shares: Number(counts.shares),
+        accessLogs: Number(counts.totalAccessLogs)
       };
-
     } catch (error) {
-      console.error('Authorize provider failed:', error.message);
-      throw new Error(`Failed to authorize provider: ${error.message}`);
+      throw new Error(`Failed to get counts: ${error.message}`);
     }
   }
 
-  /**
-   * Revoke provider authorization (revoke PROVIDER_ROLE)
-   * @param {string} providerAddress - Provider's wallet address
-   * @returns {Object} Transaction result
-   */
-  async revokeProviderAuthorization(providerAddress) {
+  async getEmergencyContact(userAddress) {
     try {
       this._ensureContract();
-      
-      console.log('Revoking provider authorization:', providerAddress);
-
-      const contract = this._getContract(true); // Admin only
-      const tx = await contract.revokeProviderAuthorization(providerAddress);
-      console.log('Transaction sent:', tx.hash);
-      
-      const receipt = await tx.wait();
-      console.log('Transaction confirmed in block:', receipt.blockNumber);
-
-      return {
-        success: true,
-        hash: receipt.hash,
-        blockNumber: receipt.blockNumber,
-        gasUsed: receipt.gasUsed.toString()
-      };
-
+      return await this.contract.getEmergencyContact(userAddress);
     } catch (error) {
-      console.error('Revoke provider authorization failed:', error.message);
-      throw new Error(`Failed to revoke provider authorization: ${error.message}`);
-    }
-  }
-
-  /**
-   * Check if address has PROVIDER_ROLE
-   * @param {string} providerAddress - Provider's wallet address
-   * @returns {boolean} True if authorized provider
-   */
-  async isAuthorizedProvider(providerAddress) {
-    try {
-      this._ensureContract();
-      
-      console.log('Checking provider authorization:', providerAddress);
-      const isAuthorized = await this.contract.isAuthorizedProvider(providerAddress);
-      
-      console.log('Provider authorized:', isAuthorized);
-      return isAuthorized;
-
-    } catch (error) {
-      console.error('Check provider authorization failed:', error.message);
-      throw new Error(`Failed to check provider authorization: ${error.message}`);
-    }
-  }
-
-  // ============================================
-  // EMERGENCY CONTACT METHODS
-  // ============================================
-
-  /**
-   * Set emergency contact for the caller
-   * @param {string} emergencyContactAddress - Emergency contact's wallet address
-   * @returns {Object} Transaction result
-   */
-  async setEmergencyContact(emergencyContactAddress) {
-    try {
-      this._ensureContract();
-      
-      console.log('Setting emergency contact:', emergencyContactAddress);
-
-      const tx = await this.contract.setEmergencyContact(emergencyContactAddress);
-      console.log('Transaction sent:', tx.hash);
-      
-      const receipt = await tx.wait();
-      console.log('Transaction confirmed in block:', receipt.blockNumber);
-
-      return {
-        success: true,
-        hash: receipt.hash,
-        blockNumber: receipt.blockNumber,
-        gasUsed: receipt.gasUsed.toString()
-      };
-
-    } catch (error) {
-      console.error('Set emergency contact failed:', error.message);
-      throw new Error(`Failed to set emergency contact: ${error.message}`);
-    }
-  }
-
-  /**
-   * Get emergency contact for a patient
-   * @param {string} patientAddress - Patient's wallet address
-   * @returns {string} Emergency contact address
-   */
-  async getEmergencyContact(patientAddress) {
-    try {
-      this._ensureContract();
-      
-      console.log('Fetching emergency contact for:', patientAddress);
-      const emergencyContact = await this.contract.emergencyContact(patientAddress);
-      
-      console.log('Emergency contact:', emergencyContact);
-      return emergencyContact;
-
-    } catch (error) {
-      console.error('Get emergency contact failed:', error.message);
       throw new Error(`Failed to get emergency contact: ${error.message}`);
-    }
-  }
-
-  // ============================================
-  // AUDIT LOGGING METHODS
-  // ============================================
-
-  /**
-   * Log an access action for a record
-   * @param {number} recordId - Record ID
-   * @param {number} action - Audit action (0-4)
-   * @returns {Object} Transaction result
-   */
-  async logAccess(recordId, action) {
-    try {
-      this._ensureContract();
-      
-      console.log('Logging access:', {
-        recordId,
-        action: this._getAuditActionName(action)
-      });
-
-      const tx = await this.contract.logAccess(recordId, action);
-      console.log('Transaction sent:', tx.hash);
-      
-      const receipt = await tx.wait();
-      console.log('Transaction confirmed in block:', receipt.blockNumber);
-
-      return {
-        success: true,
-        hash: receipt.hash,
-        blockNumber: receipt.blockNumber,
-        gasUsed: receipt.gasUsed.toString()
-      };
-
-    } catch (error) {
-      console.error('Log access failed:', error.message);
-      throw new Error(`Failed to log access: ${error.message}`);
-    }
-  }
-
-  /**
-   * Get audit logs for a record
-   * @param {number} recordId - Record ID
-   * @returns {Array} Array of audit log entries
-   */
-  async getAuditLogs(recordId) {
-    try {
-      this._ensureContract();
-      
-      console.log('Fetching audit logs for record:', recordId);
-      const logs = await this.contract.getAuditLogs(recordId);
-
-      const formattedLogs = logs.map(log => ({
-        accessor: log.accessor,
-        timestamp: Number(log.timestamp),
-        timestampDate: new Date(Number(log.timestamp) * 1000).toISOString(),
-        action: Number(log.action),
-        actionName: this._getAuditActionName(Number(log.action))
-      }));
-
-      console.log('Audit logs retrieved:', formattedLogs.length);
-      return formattedLogs;
-
-    } catch (error) {
-      console.error('Get audit logs failed:', error.message);
-      throw new Error(`Failed to get audit logs: ${error.message}`);
     }
   }
 
@@ -737,165 +389,51 @@ class BlockchainService {
   // UTILITY METHODS
   // ============================================
 
-  /**
-   * Get contract owner address
-   * @returns {string} Owner's wallet address
-   */
-  async getOwner() {
+  async getBalance(address) {
     try {
-      this._ensureContract();
-
-      console.log('Fetching contract owner...');
-      const owner = await this.contract.owner();
-      console.log('Contract owner:', owner);
-      
-      return owner;
-
+      const balance = await this.provider.getBalance(address);
+      return ethers.formatEther(balance);
     } catch (error) {
-      console.error('Get owner failed:', error.message);
-      throw new Error(`Failed to get owner: ${error.message}`);
-    }
-  }
-
-  /**
-   * Check wallet balance
-   * @param {string} address - Wallet address to check (optional, defaults to backend wallet)
-   * @returns {Object} Balance information
-   */
-  async getBalance(address = null) {
-    try {
-      const targetAddress = address || this.adminWallet?.address;
-      
-      if (!targetAddress) {
-        throw new Error('No wallet address available');
-      }
-
-      const balance = await this.provider.getBalance(targetAddress);
-
-      return {
-        address: targetAddress,
-        balance: ethers.formatEther(balance),
-        balanceWei: balance.toString(),
-        balanceETH: parseFloat(ethers.formatEther(balance)).toFixed(6)
-      };
-
-    } catch (error) {
-      console.error('Get balance failed:', error.message);
       throw new Error(`Failed to get balance: ${error.message}`);
     }
   }
 
-  /**
-   * Get current gas price information
-   * @returns {Object} Gas price in different units
-   */
   async getGasPrice() {
     try {
       const feeData = await this.provider.getFeeData();
-
       return {
         gasPrice: feeData.gasPrice ? ethers.formatUnits(feeData.gasPrice, 'gwei') + ' gwei' : 'N/A',
-        maxFeePerGas: feeData.maxFeePerGas ? ethers.formatUnits(feeData.maxFeePerGas, 'gwei') + ' gwei' : 'N/A',
-        maxPriorityFeePerGas: feeData.maxPriorityFeePerGas ? ethers.formatUnits(feeData.maxPriorityFeePerGas, 'gwei') + ' gwei' : 'N/A'
+        maxFeePerGas: feeData.maxFeePerGas ? ethers.formatUnits(feeData.maxFeePerGas, 'gwei') + ' gwei' : 'N/A'
       };
-
     } catch (error) {
-      console.error('Get gas price failed:', error.message);
       throw new Error(`Failed to get gas price: ${error.message}`);
     }
   }
 
-  /**
-   * Get current block number
-   * @returns {number} Latest block number
-   */
   async getBlockNumber() {
     try {
-      const blockNumber = await this.provider.getBlockNumber();
-      console.log('Current block:', blockNumber);
-      return blockNumber;
+      return await this.provider.getBlockNumber();
     } catch (error) {
-      console.error('Get block number failed:', error.message);
       throw new Error(`Failed to get block number: ${error.message}`);
     }
   }
 
-  /**
-   * Get network information
-   * @returns {Object} Network details
-   */
   async getNetwork() {
     try {
       const network = await this.provider.getNetwork();
       return {
         name: network.name,
-        chainId: Number(network.chainId),
-        ensAddress: network.ensAddress || 'Not supported'
+        chainId: Number(network.chainId)
       };
     } catch (error) {
-      console.error('Get network failed:', error.message);
       throw new Error(`Failed to get network: ${error.message}`);
     }
   }
 
-  // ============================================
-  // INTERNAL HELPER METHODS
-  // ============================================
-
-  /**
-   * Ensure contract is initialized before use
-   * @private
-   */
   _ensureContract() {
     if (!this.contract) {
       throw new Error('Contract not initialized. Check CONTRACT_ADDRESS in .env');
     }
-  }
-
-  /**
-   * Get contract instance with appropriate signer
-   * @private
-   * @param {boolean} requiresAdmin - Whether this operation requires admin privileges
-   * @returns {ethers.Contract} Contract instance with correct signer
-   */
-  _getContract(requiresAdmin = false) {
-    if (requiresAdmin) {
-      if (!this.adminContract) {
-        throw new Error('Admin operations require ADMIN_PRIVATE_KEY in .env');
-      }
-      return this.adminContract;
-    }
-    
-    // For testing: use admin wallet if available
-    // For production: this should throw an error, forcing frontend to sign
-    if (this.adminContract) {
-      console.warn('⚠️  Using backend wallet for user operation. This is ONLY for testing!');
-      return this.adminContract;
-    }
-    
-    throw new Error('User operations must be signed by the user wallet (frontend)');
-  }
-
-  /**
-   * Get record type name from enum value
-   * @private
-   * @param {number} recordType - Record type enum (0-5)
-   * @returns {string} Record type name
-   */
-  _getRecordTypeName(recordType) {
-    const types = ['LAB_REPORT', 'PRESCRIPTION', 'MEDICAL_IMAGE', 'DIAGNOSIS', 'VACCINATION', 'VISIT_SUMMARY'];
-    return types[recordType] || 'UNKNOWN';
-  }
-
-  /**
-   * Get audit action name from enum value
-   * @private
-   * @param {number} action - Audit action enum (0-4)
-   * @returns {string} Action name
-   */
-  _getAuditActionName(action) {
-    const actions = ['VIEW', 'DOWNLOAD', 'SHARE', 'UPDATE', 'DELETE'];
-    return actions[action] || 'UNKNOWN';
   }
 }
 

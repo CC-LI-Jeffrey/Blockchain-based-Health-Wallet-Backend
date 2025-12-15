@@ -16,7 +16,10 @@ class AdminService {
         this.provider = new ethers.JsonRpcProvider(process.env.RPC_URL || 'http://127.0.0.1:8545');
         
         if (!process.env.ADMIN_PRIVATE_KEY) {
-            throw new Error('ADMIN_PRIVATE_KEY not found in environment variables');
+            console.warn('⚠️  ADMIN_PRIVATE_KEY not configured - admin operations disabled');
+            this.adminWallet = null;
+            this.contract = null;
+            return;
         }
         
         this.adminWallet = new ethers.Wallet(process.env.ADMIN_PRIVATE_KEY, this.provider);
@@ -50,6 +53,10 @@ class AdminService {
      */
     async authorizeProvider(providerAddress) {
         try {
+            if (!this.adminWallet || !this.contract) {
+                throw new Error('Admin operations not available - ADMIN_PRIVATE_KEY not configured');
+            }
+            
             if (!ethers.isAddress(providerAddress)) {
                 throw new Error('Invalid provider address');
             }
@@ -84,6 +91,10 @@ class AdminService {
      */
     async revokeProviderAuthorization(providerAddress) {
         try {
+            if (!this.adminWallet || !this.contract) {
+                throw new Error('Admin operations not available - ADMIN_PRIVATE_KEY not configured');
+            }
+            
             if (!ethers.isAddress(providerAddress)) {
                 throw new Error('Invalid provider address');
             }

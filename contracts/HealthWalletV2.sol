@@ -3,11 +3,11 @@ pragma solidity ^0.8.20;
 
 import "@openzeppelin/contracts/access/Ownable.sol";
 import "@openzeppelin/contracts/access/AccessControl.sol";
-import "@openzeppelin/contracts/security/ReentrancyGuard.sol";
-import "@openzeppelin/contracts/security/Pausable.sol";
+import "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
+import "@openzeppelin/contracts/utils/Pausable.sol";
 
 /**
- * @title HealthWalletV2_Secure
+ * @title HealthWalletV2
  * @dev Privacy-focused health record management - ALL sensitive data encrypted and stored off-chain
  * @notice Only metadata and encrypted IPFS hashes stored on-chain for maximum privacy
  * 
@@ -18,7 +18,7 @@ import "@openzeppelin/contracts/security/Pausable.sol";
  * - Minimal metadata on-chain (timestamps, types, IDs)
  * - Access control via blockchain, data retrieval via IPFS
  */
-contract HealthWalletV2_Secure is Ownable, AccessControl, ReentrancyGuard, Pausable {
+contract HealthWalletV2 is Ownable, AccessControl, ReentrancyGuard, Pausable {
     
     // ============================================
     // ROLES
@@ -261,27 +261,27 @@ contract HealthWalletV2_Secure is Ownable, AccessControl, ReentrancyGuard, Pausa
     // ============================================
     
     modifier onlyPersonalInfoOwner() {
-        require(personalInfoRefs[msg.sender].exists, "Personal info not created");
+        require(personalInfoRefs[msg.sender].exists, "No info");
         _;
     }
     
     modifier onlyMedicationOwner(uint256 _medicationId) {
-        require(medicationOwner[_medicationId] == msg.sender, "Not medication owner");
+        require(medicationOwner[_medicationId] == msg.sender, "Not owner");
         _;
     }
     
     modifier onlyVaccinationOwner(uint256 _vaccinationId) {
-        require(vaccinationOwner[_vaccinationId] == msg.sender, "Not vaccination owner");
+        require(vaccinationOwner[_vaccinationId] == msg.sender, "Not owner");
         _;
     }
     
     modifier onlyReportOwner(uint256 _reportId) {
-        require(reportOwner[_reportId] == msg.sender, "Not report owner");
+        require(reportOwner[_reportId] == msg.sender, "Not owner");
         _;
     }
     
     modifier onlyShareOwner(uint256 _shareId) {
-        require(shareOwner[_shareId] == msg.sender, "Not share owner");
+        require(shareOwner[_shareId] == msg.sender, "Not owner");
         _;
     }
     
@@ -290,7 +290,7 @@ contract HealthWalletV2_Secure is Ownable, AccessControl, ReentrancyGuard, Pausa
             msg.sender == _user || 
             _hasSharedAccess(_user, msg.sender, _category) ||
             hasRole(AUDITOR_ROLE, msg.sender),
-            "No access to this data"
+            "No access"
         );
         _;
     }
@@ -342,7 +342,7 @@ contract HealthWalletV2_Secure is Ownable, AccessControl, ReentrancyGuard, Pausa
         hasDataAccess(_user, DataCategory.PERSONAL_INFO)
         returns (PersonalInfoRef memory) 
     {
-        require(personalInfoRefs[_user].exists, "Personal info not found");
+        require(personalInfoRefs[_user].exists, "Not found");
         return personalInfoRefs[_user];
     }
     
@@ -426,7 +426,7 @@ contract HealthWalletV2_Secure is Ownable, AccessControl, ReentrancyGuard, Pausa
             msg.sender == owner || 
             _hasSharedAccess(owner, msg.sender, DataCategory.MEDICATION_RECORDS) ||
             hasRole(AUDITOR_ROLE, msg.sender),
-            "No access to this medication record"
+            "No access"
         );
         return medicationRefs[_medicationId];
     }
@@ -503,7 +503,7 @@ contract HealthWalletV2_Secure is Ownable, AccessControl, ReentrancyGuard, Pausa
             msg.sender == owner || 
             _hasSharedAccess(owner, msg.sender, DataCategory.VACCINATION_RECORDS) ||
             hasRole(AUDITOR_ROLE, msg.sender),
-            "No access to this vaccination record"
+            "No access"
         );
         return vaccinationRefs[_vaccinationId];
     }
@@ -588,7 +588,7 @@ contract HealthWalletV2_Secure is Ownable, AccessControl, ReentrancyGuard, Pausa
             msg.sender == owner || 
             _hasSharedAccess(owner, msg.sender, DataCategory.MEDICAL_REPORTS) ||
             hasRole(AUDITOR_ROLE, msg.sender),
-            "No access to this report"
+            "No access"
         );
         return reportRefs[_reportId];
     }
@@ -621,9 +621,9 @@ contract HealthWalletV2_Secure is Ownable, AccessControl, ReentrancyGuard, Pausa
         AccessLevel _accessLevel,
         string memory _encryptedCategoryKey
     ) external whenNotPaused onlyPersonalInfoOwner returns (uint256) {
-        require(_recipientAddress != address(0), "Invalid recipient address");
-        require(_recipientAddress != msg.sender, "Cannot share with yourself");
-        require(_expiryDate > block.timestamp, "Expiry must be in future");
+        require(_recipientAddress != address(0), "Invalid addr");
+        require(_recipientAddress != msg.sender, "No self-share");
+        require(_expiryDate > block.timestamp, "Invalid expiry");
         
         shareCounter++;
         uint256 newId = shareCounter;
@@ -661,7 +661,7 @@ contract HealthWalletV2_Secure is Ownable, AccessControl, ReentrancyGuard, Pausa
      * @dev Get all share record IDs for a user
      */
     function getShareIds(address _user) external view returns (uint256[] memory) {
-        require(msg.sender == _user || hasRole(AUDITOR_ROLE, msg.sender), "Not authorized");
+        require(msg.sender == _user || hasRole(AUDITOR_ROLE, msg.sender), "No auth");
         return userShareIds[_user];
     }
     
@@ -674,7 +674,7 @@ contract HealthWalletV2_Secure is Ownable, AccessControl, ReentrancyGuard, Pausa
             msg.sender == owner || 
             msg.sender == shareRecords[_shareId].recipientAddress ||
             hasRole(AUDITOR_ROLE, msg.sender),
-            "Not authorized"
+            "No auth"
         );
         
         ShareRecord memory share = shareRecords[_shareId];
@@ -735,7 +735,7 @@ contract HealthWalletV2_Secure is Ownable, AccessControl, ReentrancyGuard, Pausa
             msg.sender == _owner ||
             _hasSharedAccess(_owner, msg.sender, _accessedCategory) ||
             hasRole(AUDITOR_ROLE, msg.sender),
-            "No permission to access this data"
+            "No permission"
         );
         
         accessLogCounter++;
@@ -761,7 +761,7 @@ contract HealthWalletV2_Secure is Ownable, AccessControl, ReentrancyGuard, Pausa
      * @dev Get all access log IDs for a user
      */
     function getAccessLogIds(address _user) external view returns (uint256[] memory) {
-        require(msg.sender == _user || hasRole(AUDITOR_ROLE, msg.sender), "Not authorized");
+        require(msg.sender == _user || hasRole(AUDITOR_ROLE, msg.sender), "No auth");
         return userAccessLogIds[_user];
     }
     
@@ -773,7 +773,7 @@ contract HealthWalletV2_Secure is Ownable, AccessControl, ReentrancyGuard, Pausa
         require(
             msg.sender == owner || 
             hasRole(AUDITOR_ROLE, msg.sender),
-            "Not authorized to view this log"
+            "No auth"
         );
         return accessLogs[_logId];
     }
@@ -787,7 +787,7 @@ contract HealthWalletV2_Secure is Ownable, AccessControl, ReentrancyGuard, Pausa
      * Emergency contact details stored in personal info (encrypted)
      */
     function setEmergencyContact(address _emergencyContact) external {
-        require(_emergencyContact != address(0), "Invalid address");
+        require(_emergencyContact != address(0), "Invalid addr");
         emergencyContactAddresses[msg.sender] = _emergencyContact;
         emit EmergencyContactSet(msg.sender, _emergencyContact);
     }
@@ -854,7 +854,7 @@ contract HealthWalletV2_Secure is Ownable, AccessControl, ReentrancyGuard, Pausa
         uint256 vaccinations,
         uint256 reports,
         uint256 shares,
-        uint256 accessLogs
+        uint256 totalAccessLogs
     ) {
         return (
             medicationCounter,

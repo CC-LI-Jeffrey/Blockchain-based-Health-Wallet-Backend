@@ -4,16 +4,22 @@ const blockchainService = require('../services/blockchainService');
 
 /**
  * @route   GET /api/test/ping
- * @desc    Test connection to smart contract
+ * @desc    Test connection to HealthWalletV2 contract (Sepolia)
  */
 router.get('/ping', async (req, res) => {
   try {
-    const response = await blockchainService.ping();
+    // Test contract connection by getting network info
+    const network = await blockchainService.getNetwork();
+    const blockNumber = await blockchainService.getBlockNumber();
+    const counts = await blockchainService.getTotalCounts();
     
     res.status(200).json({
       success: true,
-      message: 'Contract connection successful',
-      contractResponse: response,
+      message: 'HealthWalletV2 connection successful',
+      network: network,
+      blockNumber: blockNumber,
+      contractStats: counts,
+      contractAddress: blockchainService.contractAddress,
       timestamp: new Date().toISOString()
     });
 
@@ -27,29 +33,25 @@ router.get('/ping', async (req, res) => {
 });
 
 /**
- * @route   POST /api/test/set/:value
- * @desc    Set a value in the smart contract
+ * @route   GET /api/test/network
+ * @desc    Get blockchain network information
  */
-router.post('/set/:value', async (req, res) => {
+router.get('/network', async (req, res) => {
   try {
-    const value = parseInt(req.params.value);
-
-    if (isNaN(value)) {
-      return res.status(400).json({ error: 'Invalid value. Must be a number.' });
-    }
-
-    const receipt = await blockchainService.setValue(value);
+    const network = await blockchainService.getNetwork();
+    const blockNumber = await blockchainService.getBlockNumber();
+    const gasPrice = await blockchainService.getGasPrice();
 
     res.status(200).json({
       success: true,
-      message: 'Value set successfully',
-      value: value,
-      transaction: receipt,
+      network: network,
+      latestBlock: blockNumber,
+      gasPrice: gasPrice,
       timestamp: new Date().toISOString()
     });
 
   } catch (error) {
-    console.error('Set value test error:', error);
+    console.error('Network test error:', error);
     res.status(500).json({ 
       success: false,
       error: error.message
@@ -58,21 +60,22 @@ router.post('/set/:value', async (req, res) => {
 });
 
 /**
- * @route   GET /api/test/get
- * @desc    Get the stored value from smart contract
+ * @route   GET /api/test/stats
+ * @desc    Get contract statistics
  */
-router.get('/get', async (req, res) => {
+router.get('/stats', async (req, res) => {
   try {
-    const value = await blockchainService.getValue();
+    const counts = await blockchainService.getTotalCounts();
 
     res.status(200).json({
       success: true,
-      storedValue: value,
+      stats: counts,
+      contractAddress: blockchainService.contractAddress,
       timestamp: new Date().toISOString()
     });
 
   } catch (error) {
-    console.error('Get value test error:', error);
+    console.error('Stats test error:', error);
     res.status(500).json({ 
       success: false,
       error: error.message
@@ -81,21 +84,23 @@ router.get('/get', async (req, res) => {
 });
 
 /**
- * @route   GET /api/test/owner
- * @desc    Get the contract owner address
+ * @route   GET /api/test/balance/:address
+ * @desc    Get ETH balance for an address
  */
-router.get('/owner', async (req, res) => {
+router.get('/balance/:address', async (req, res) => {
   try {
-    const owner = await blockchainService.getOwner();
+    const address = req.params.address;
+    const balance = await blockchainService.getBalance(address);
 
     res.status(200).json({
       success: true,
-      owner: owner,
+      address: address,
+      balance: balance + ' ETH',
       timestamp: new Date().toISOString()
     });
 
   } catch (error) {
-    console.error('Get owner test error:', error);
+    console.error('Balance test error:', error);
     res.status(500).json({ 
       success: false,
       error: error.message
