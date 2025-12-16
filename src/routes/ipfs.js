@@ -165,4 +165,44 @@ router.get('/url/:ipfsHash', (req, res) => {
   }
 });
 
+/**
+ * @route   GET /api/ipfs/file/:ipfsHash
+ * @desc    Retrieve file content from IPFS
+ * @access  Public
+ */
+router.get('/file/:ipfsHash', async (req, res) => {
+  try {
+    const { ipfsHash } = req.params;
+
+    if (!ipfsHash) {
+      return res.status(400).json({
+        success: false,
+        error: 'IPFS hash is required'
+      });
+    }
+
+    console.log(`Fetching file from IPFS: ${ipfsHash}`);
+
+    // Fetch file from Pinata gateway
+    const fileUrl = pinataService.getFileUrl(ipfsHash);
+    const axios = require('axios');
+    const response = await axios.get(fileUrl, {
+      responseType: 'arraybuffer',
+      timeout: 30000
+    });
+
+    // Forward the file content with original content type
+    res.set('Content-Type', response.headers['content-type'] || 'application/octet-stream');
+    res.send(response.data);
+
+  } catch (error) {
+    console.error('File retrieval error:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Failed to retrieve file from IPFS',
+      message: error.message
+    });
+  }
+});
+
 module.exports = router;
