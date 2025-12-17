@@ -38,12 +38,7 @@ app.get('/health', (req, res) => {
 });
 
 // API routes
-// app.use('/api/auth', require('./routes/auth'));
 app.use('/api/ipfs', require('./routes/ipfs'));
-app.use('/api/test', require('./routes/test'));
-app.use('/api/health', require('./routes/health'));
-app.use('/api/records', require('./routes/healthRecords'));
-app.use('/api/admin', require('./routes/admin')); // Admin operations
 
 // Error handling
 

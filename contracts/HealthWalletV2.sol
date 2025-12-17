@@ -90,7 +90,6 @@ contract HealthWalletV2 is Ownable, AccessControl, ReentrancyGuard, Pausable {
      */
     struct PersonalInfoRef {
         string encryptedDataIpfsHash;  // IPFS hash of encrypted JSON
-        bytes32 publicKeyHash;         // Hash of user's public key (for verification)
         uint256 createdAt;
         uint256 lastUpdated;
         bool exists;
@@ -211,6 +210,9 @@ contract HealthWalletV2 is Ownable, AccessControl, ReentrancyGuard, Pausable {
     // Emergency contact addresses (only address visible, details encrypted)
     mapping(address => address) private emergencyContactAddresses;
     
+    // ECDH Public Keys for secure sharing (64 bytes stored as hex string)
+    mapping(address => string) private ecdhPublicKeys;
+    
     // ============================================
     // EVENTS
     // ============================================
@@ -226,6 +228,8 @@ contract HealthWalletV2 is Ownable, AccessControl, ReentrancyGuard, Pausable {
     
     event ReportAdded(address indexed user, uint256 indexed reportId, ReportType reportType, string ipfsHash);
     event ReportUpdated(address indexed user, uint256 indexed reportId, string ipfsHash);
+    
+    event ECDHKeyRegistered(address indexed user, uint256 timestamp);
     
     event DataShared(
         address indexed owner, 
@@ -302,7 +306,6 @@ contract HealthWalletV2 is Ownable, AccessControl, ReentrancyGuard, Pausable {
     /**
      * @dev Store encrypted personal information reference
      * @param _encryptedDataIpfsHash IPFS hash of encrypted personal data JSON
-     * @param _publicKeyHash Hash of user's public encryption key
      * 
      * Client must:
      * 1. Encrypt all personal data with symmetric key
@@ -310,15 +313,13 @@ contract HealthWalletV2 is Ownable, AccessControl, ReentrancyGuard, Pausable {
      * 3. Store only IPFS hash on blockchain
      */
     function setPersonalInfo(
-        string memory _encryptedDataIpfsHash,
-        bytes32 _publicKeyHash
+        string memory _encryptedDataIpfsHash
     ) external whenNotPaused {
         bool isNew = !personalInfoRefs[msg.sender].exists;
         
         if (isNew) {
             personalInfoRefs[msg.sender] = PersonalInfoRef({
                 encryptedDataIpfsHash: _encryptedDataIpfsHash,
-                publicKeyHash: _publicKeyHash,
                 createdAt: block.timestamp,
                 lastUpdated: block.timestamp,
                 exists: true
@@ -326,7 +327,6 @@ contract HealthWalletV2 is Ownable, AccessControl, ReentrancyGuard, Pausable {
             emit PersonalInfoStored(msg.sender, _encryptedDataIpfsHash, block.timestamp);
         } else {
             personalInfoRefs[msg.sender].encryptedDataIpfsHash = _encryptedDataIpfsHash;
-            personalInfoRefs[msg.sender].publicKeyHash = _publicKeyHash;
             personalInfoRefs[msg.sender].lastUpdated = block.timestamp;
             emit PersonalInfoUpdated(msg.sender, _encryptedDataIpfsHash, block.timestamp);
         }
@@ -688,6 +688,14 @@ contract HealthWalletV2 is Ownable, AccessControl, ReentrancyGuard, Pausable {
     }
     
     /**
+     * @dev Get share owner address
+     * This is public so recipients can look up who shared with them
+     */
+    function getShareOwner(uint256 _shareId) external view returns (address) {
+        return shareOwner[_shareId];
+    }
+    
+    /**
      * @dev Internal function to check shared access
      */
     function _hasSharedAccess(
@@ -867,5 +875,39 @@ contract HealthWalletV2 is Ownable, AccessControl, ReentrancyGuard, Pausable {
     
     function hasPersonalInfo(address _user) external view returns (bool) {
         return personalInfoRefs[_user].exists;
+    }
+    
+    // ============================================
+    // ECDH PUBLIC KEY FUNCTIONS
+    // ============================================
+    
+    /**
+     * @dev Register ECDH public key for secure data sharing
+     * This key is used for encrypting category keys when sharing data
+     * @param _publicKey The ECDH public key as hex string (128 chars = 64 bytes)
+     */
+    function registerECDHPublicKey(string memory _publicKey) external whenNotPaused {
+        require(bytes(_publicKey).length == 128, "Invalid public key length (need 128 hex chars)");
+        ecdhPublicKeys[msg.sender] = _publicKey;
+        emit ECDHKeyRegistered(msg.sender, block.timestamp);
+    }
+    
+    /**
+     * @dev Get ECDH public key for an address
+     * Anyone can query this - public keys are meant to be public
+     * @param _user The address to get the public key for
+     * @return The ECDH public key as hex string, or empty if not registered
+     */
+    function getECDHPublicKey(address _user) external view returns (string memory) {
+        return ecdhPublicKeys[_user];
+    }
+    
+    /**
+     * @dev Check if an address has registered an ECDH public key
+     * @param _user The address to check
+     * @return True if the address has a registered public key
+     */
+    function hasECDHPublicKey(address _user) external view returns (bool) {
+        return bytes(ecdhPublicKeys[_user]).length > 0;
     }
 }
