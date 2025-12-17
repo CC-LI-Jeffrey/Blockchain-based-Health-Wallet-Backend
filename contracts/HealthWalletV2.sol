@@ -192,8 +192,10 @@ contract HealthWalletV2 is Ownable, AccessControl, ReentrancyGuard, Pausable {
     mapping(address => uint256[]) private userReportIds;
     mapping(uint256 => MedicalReportRef) private reportRefs;
     
-    // User Address => Share Record IDs
+    // User Address => Share Record IDs (shares they CREATED)
     mapping(address => uint256[]) private userShareIds;
+    // User Address => Share Record IDs (shares they RECEIVED)
+    mapping(address => uint256[]) private recipientShareIds;
     mapping(uint256 => ShareRecord) private shareRecords;
     
     // User Address => Access Log IDs
@@ -644,6 +646,7 @@ contract HealthWalletV2 is Ownable, AccessControl, ReentrancyGuard, Pausable {
         
         shareOwner[newId] = msg.sender;
         userShareIds[msg.sender].push(newId);
+        recipientShareIds[_recipientAddress].push(newId);
         
         emit DataShared(msg.sender, _recipientAddress, newId, _dataCategory, _expiryDate);
         return newId;
@@ -658,11 +661,20 @@ contract HealthWalletV2 is Ownable, AccessControl, ReentrancyGuard, Pausable {
     }
     
     /**
-     * @dev Get all share record IDs for a user
+     * @dev Get all share record IDs for a user (shares they CREATED)
      */
     function getShareIds(address _user) external view returns (uint256[] memory) {
         require(msg.sender == _user || hasRole(AUDITOR_ROLE, msg.sender), "No auth");
         return userShareIds[_user];
+    }
+    
+    /**
+     * @dev Get all share record IDs where user is RECIPIENT
+     * Anyone can query their own received shares
+     */
+    function getReceivedShareIds(address _recipient) external view returns (uint256[] memory) {
+        require(msg.sender == _recipient || hasRole(AUDITOR_ROLE, msg.sender), "No auth");
+        return recipientShareIds[_recipient];
     }
     
     /**
