@@ -98,6 +98,7 @@ contract HealthWalletV2_05 is Ownable, AccessControl, ReentrancyGuard, Pausable 
         uint256 createdAt;
         uint256 lastUpdated;
         bool exists;
+        string encryptedKey;           // Encrypted random AES key for this record
     }
 
     /**
@@ -316,7 +317,8 @@ contract HealthWalletV2_05 is Ownable, AccessControl, ReentrancyGuard, Pausable 
      */
     function setPersonalInfo(
         string memory _encryptedDataIpfsHash,
-        bytes32 _publicKeyHash
+        bytes32 _publicKeyHash,
+        string memory _encryptedKey
     ) external whenNotPaused {
         bool isNew = !personalInfoRefs[msg.sender].exists;
 
@@ -326,13 +328,15 @@ contract HealthWalletV2_05 is Ownable, AccessControl, ReentrancyGuard, Pausable 
                 publicKeyHash: _publicKeyHash,
                 createdAt: block.timestamp,
                 lastUpdated: block.timestamp,
-                exists: true
+                exists: true,
+                encryptedKey: _encryptedKey
             });
             emit PersonalInfoStored(msg.sender, _encryptedDataIpfsHash, block.timestamp);
         } else {
             personalInfoRefs[msg.sender].encryptedDataIpfsHash = _encryptedDataIpfsHash;
             personalInfoRefs[msg.sender].publicKeyHash = _publicKeyHash;
             personalInfoRefs[msg.sender].lastUpdated = block.timestamp;
+            personalInfoRefs[msg.sender].encryptedKey = _encryptedKey;
             emit PersonalInfoUpdated(msg.sender, _encryptedDataIpfsHash, block.timestamp);
         }
     }
