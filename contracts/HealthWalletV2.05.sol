@@ -89,12 +89,23 @@ contract HealthWalletV2_05 is Ownable, AccessControl, ReentrancyGuard, Pausable 
     // ============================================
 
     /**
+     * @dev User Crypto Profile - Manages RSA public key for sharing
+     * Full public key stored on IPFS for gas efficiency
+     */
+    struct UserCryptoProfile {
+        bytes32 publicKeyHash;      // Hash of public key for verification
+        string publicKeyIpfsHash;   // IPFS hash of full RSA public key
+        uint256 keyVersion;         // For key rotation support
+        bool isSet;
+    }
+
+    /**
      * @dev Encrypted Personal Info Reference
      * Actual data (name, email, phone, etc.) encrypted and stored on IPFS
+     * Public key now managed separately in UserCryptoProfile
      */
     struct PersonalInfoRef {
         string encryptedDataIpfsHash;  // IPFS hash of encrypted JSON
-        bytes32 publicKeyHash;         // Hash of user's public key (for verification)
         uint256 createdAt;
         uint256 lastUpdated;
         bool exists;
@@ -187,6 +198,9 @@ contract HealthWalletV2_05 is Ownable, AccessControl, ReentrancyGuard, Pausable 
     // User Address => Encrypted Personal Info Reference
     mapping(address => PersonalInfoRef) private personalInfoRefs;
 
+    // User Address => Crypto Profile (RSA public key management)
+    mapping(address => UserCryptoProfile) public userCryptoProfiles;
+
     // User Address => Medication IDs
     mapping(address => uint256[]) private userMedicationIds;
     mapping(uint256 => MedicationRecordRef) private medicationRefs;
@@ -254,6 +268,7 @@ contract HealthWalletV2_05 is Ownable, AccessControl, ReentrancyGuard, Pausable 
     event EntityRevoked(address indexed entity, bytes32 role);
 
     event EmergencyContactSet(address indexed user, address indexed emergencyContact);
+    event PublicKeySet(address indexed user, string publicKeyIpfsHash, uint256 keyVersion);
 
     // ============================================
     // CONSTRUCTOR
@@ -308,16 +323,16 @@ contract HealthWalletV2_05 is Ownable, AccessControl, ReentrancyGuard, Pausable 
     /**
      * @dev Store encrypted personal information reference
      * @param _encryptedDataIpfsHash IPFS hash of encrypted personal data JSON
-     * @param _publicKeyHash Hash of user's public encryption key
+     * @param _encryptedKey Encrypted random AES key for this record
      *
      * Client must:
      * 1. Encrypt all personal data with symmetric key
      * 2. Upload encrypted data to IPFS
      * 3. Store only IPFS hash on blockchain
+     * Note: Public key managed separately via setUserPublicKey()
      */
     function setPersonalInfo(
         string memory _encryptedDataIpfsHash,
-        bytes32 _publicKeyHash,
         string memory _encryptedKey
     ) external whenNotPaused {
         bool isNew = !personalInfoRefs[msg.sender].exists;
@@ -325,7 +340,6 @@ contract HealthWalletV2_05 is Ownable, AccessControl, ReentrancyGuard, Pausable 
         if (isNew) {
             personalInfoRefs[msg.sender] = PersonalInfoRef({
                 encryptedDataIpfsHash: _encryptedDataIpfsHash,
-                publicKeyHash: _publicKeyHash,
                 createdAt: block.timestamp,
                 lastUpdated: block.timestamp,
                 exists: true,
@@ -334,11 +348,49 @@ contract HealthWalletV2_05 is Ownable, AccessControl, ReentrancyGuard, Pausable 
             emit PersonalInfoStored(msg.sender, _encryptedDataIpfsHash, block.timestamp);
         } else {
             personalInfoRefs[msg.sender].encryptedDataIpfsHash = _encryptedDataIpfsHash;
-            personalInfoRefs[msg.sender].publicKeyHash = _publicKeyHash;
             personalInfoRefs[msg.sender].lastUpdated = block.timestamp;
             personalInfoRefs[msg.sender].encryptedKey = _encryptedKey;
             emit PersonalInfoUpdated(msg.sender, _encryptedDataIpfsHash, block.timestamp);
         }
+    }
+
+    /**
+     * @dev Set user's RSA public key for sharing functionality
+     * @param _publicKeyIpfsHash IPFS hash where full RSA public key is stored
+     * @param _publicKeyHash Hash of the public key for verification
+     * 
+     * Flow:
+     * 1. Generate RSA key pair on client
+     * 2. Upload public key to IPFS
+     * 3. Store IPFS hash on blockchain
+     */
+    function setUserPublicKey(
+        string memory _publicKeyIpfsHash,
+        bytes32 _publicKeyHash
+    ) external whenNotPaused {
+        require(bytes(_publicKeyIpfsHash).length > 0, "Invalid IPFS hash");
+        require(_publicKeyHash != bytes32(0), "Invalid key hash");
+
+        uint256 newVersion = userCryptoProfiles[msg.sender].keyVersion + 1;
+
+        userCryptoProfiles[msg.sender] = UserCryptoProfile({
+            publicKeyHash: _publicKeyHash,
+            publicKeyIpfsHash: _publicKeyIpfsHash,
+            keyVersion: newVersion,
+            isSet: true
+        });
+
+        emit PublicKeySet(msg.sender, _publicKeyIpfsHash, newVersion);
+    }
+
+    /**
+     * @dev Get user's public key IPFS hash for sharing
+     * @param _user Address of the user
+     * @return publicKeyIpfsHash IPFS hash of user's RSA public key
+     */
+    function getUserPublicKey(address _user) external view returns (string memory) {
+        require(userCryptoProfiles[_user].isSet, "Public key not set");
+        return userCryptoProfiles[_user].publicKeyIpfsHash;
     }
 
     /**
