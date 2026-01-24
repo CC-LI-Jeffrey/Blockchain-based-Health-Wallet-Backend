@@ -119,6 +119,7 @@ contract HealthWalletV2_05 is Ownable, AccessControl, ReentrancyGuard, Pausable 
     struct MedicationRecordRef {
         uint256 id;
         string encryptedDataIpfsHash;  // IPFS hash of encrypted medication data
+        string encryptedKey;           // AES key encrypted with user's master key
         bool isActive;                 // Only status visible (for filtering)
         uint256 startDate;             // Date metadata (for chronological ordering)
         uint256 endDate;
@@ -417,6 +418,7 @@ contract HealthWalletV2_05 is Ownable, AccessControl, ReentrancyGuard, Pausable 
      */
     function addMedication(
         string memory _encryptedDataIpfsHash,
+        string memory _encryptedKey,
         bool _isActive,
         uint256 _startDate,
         uint256 _endDate
@@ -427,6 +429,7 @@ contract HealthWalletV2_05 is Ownable, AccessControl, ReentrancyGuard, Pausable 
         medicationRefs[newId] = MedicationRecordRef({
             id: newId,
             encryptedDataIpfsHash: _encryptedDataIpfsHash,
+            encryptedKey: _encryptedKey,
             isActive: _isActive,
             startDate: _startDate,
             endDate: _endDate,
@@ -446,12 +449,14 @@ contract HealthWalletV2_05 is Ownable, AccessControl, ReentrancyGuard, Pausable 
     function updateMedication(
         uint256 _medicationId,
         string memory _encryptedDataIpfsHash,
+        string memory _encryptedKey,
         bool _isActive,
         uint256 _startDate,
         uint256 _endDate
     ) external whenNotPaused onlyMedicationOwner(_medicationId) {
         MedicationRecordRef storage med = medicationRefs[_medicationId];
         med.encryptedDataIpfsHash = _encryptedDataIpfsHash;
+        med.encryptedKey = _encryptedKey;
         med.isActive = _isActive;
         med.startDate = _startDate;
         med.endDate = _endDate;
