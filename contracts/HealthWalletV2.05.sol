@@ -136,6 +136,7 @@ contract HealthWalletV2_05 is Ownable, AccessControl, ReentrancyGuard, Pausable 
         string encryptedCertificateIpfsHash; // IPFS hash of encrypted certificate
         uint256 vaccinationDate;           // Date metadata only
         uint256 createdAt;
+        string encryptedKey;           // NEW: Encrypted random AES key for this record
     }
 
     /**
@@ -505,11 +506,16 @@ contract HealthWalletV2_05 is Ownable, AccessControl, ReentrancyGuard, Pausable 
 
     /**
      * @dev Add encrypted vaccination record
+     * @param _encryptedDataIpfsHash IPFS hash of encrypted vaccination data
+     * @param _encryptedCertificateIpfsHash IPFS hash of encrypted certificate file
+     * @param _vaccinationDate Vaccination date (Unix timestamp)
+     * @param _encryptedKey Encrypted random AES key for this record
      */
     function addVaccination(
         string memory _encryptedDataIpfsHash,
         string memory _encryptedCertificateIpfsHash,
-        uint256 _vaccinationDate
+        uint256 _vaccinationDate,
+        string memory _encryptedKey
     ) external whenNotPaused onlyPersonalInfoOwner returns (uint256) {
         vaccinationCounter++;
         uint256 newId = vaccinationCounter;
@@ -519,7 +525,8 @@ contract HealthWalletV2_05 is Ownable, AccessControl, ReentrancyGuard, Pausable 
             encryptedDataIpfsHash: _encryptedDataIpfsHash,
             encryptedCertificateIpfsHash: _encryptedCertificateIpfsHash,
             vaccinationDate: _vaccinationDate,
-            createdAt: block.timestamp
+            createdAt: block.timestamp,
+            encryptedKey: _encryptedKey
         });
 
         vaccinationOwner[newId] = msg.sender;
@@ -531,17 +538,24 @@ contract HealthWalletV2_05 is Ownable, AccessControl, ReentrancyGuard, Pausable 
 
     /**
      * @dev Update vaccination record
+     * @param _vaccinationId ID of the vaccination record to update
+     * @param _encryptedDataIpfsHash IPFS hash of encrypted vaccination data
+     * @param _encryptedCertificateIpfsHash IPFS hash of encrypted certificate file
+     * @param _vaccinationDate Vaccination date (Unix timestamp)
+     * @param _encryptedKey Encrypted random AES key for this record
      */
     function updateVaccination(
         uint256 _vaccinationId,
         string memory _encryptedDataIpfsHash,
         string memory _encryptedCertificateIpfsHash,
-        uint256 _vaccinationDate
+        uint256 _vaccinationDate,
+        string memory _encryptedKey
     ) external whenNotPaused onlyVaccinationOwner(_vaccinationId) {
         VaccinationRecordRef storage vac = vaccinationRefs[_vaccinationId];
         vac.encryptedDataIpfsHash = _encryptedDataIpfsHash;
         vac.encryptedCertificateIpfsHash = _encryptedCertificateIpfsHash;
         vac.vaccinationDate = _vaccinationDate;
+        vac.encryptedKey = _encryptedKey;
 
         emit VaccinationUpdated(msg.sender, _vaccinationId, _encryptedDataIpfsHash);
     }
