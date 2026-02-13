@@ -1,5 +1,6 @@
 const express = require('express');
 const router = express.Router();
+const axios = require('axios');
 const merkleService = require('../services/merkleService');
 const pinataService = require('../services/pinataService');
 const { ethers } = require('ethers');
@@ -121,27 +122,49 @@ router.post('/verify', async (req, res) => {
  */
 router.post('/upload-package', async (req, res) => {
     try {
+        console.log('\n========================================');
+        console.log('📦 PARTIAL SHARE UPLOAD REQUEST');
+        console.log('========================================');
+        
         const { sharePackage } = req.body;
         
         if (!sharePackage) {
+            console.log('❌ Missing sharePackage in request body');
             return res.status(400).json({
                 success: false,
                 error: 'Missing sharePackage'
             });
         }
         
+        // Parse the package if it's a string
+        const packageData = typeof sharePackage === 'string' ? JSON.parse(sharePackage) : sharePackage;
+        
+        console.log('Package Details:');
+        console.log('  - Record Type:', packageData.recordType);
+        console.log('  - Merkle Root:', packageData.merkleRoot);
+        console.log('  - Attributes:', Object.keys(packageData.attributes || {}).join(', '));
+        console.log('  - Version:', packageData.version);
+        console.log('  - Package Size:', JSON.stringify(packageData).length, 'bytes');
+        
+        console.log('\n⏳ Uploading to IPFS via Pinata...');
+        
         // Upload encrypted package to IPFS
-        const packageBuffer = Buffer.from(JSON.stringify(sharePackage));
+        const packageBuffer = Buffer.from(JSON.stringify(packageData));
         const result = await pinataService.uploadFile(
             packageBuffer,
             `partial-share-${Date.now()}.json`,
             {
                 type: 'partial-share-package',
-                version: sharePackage.version || '1.0',
-                recordType: sharePackage.recordType,
+                version: packageData.version || '1.0',
+                recordType: packageData.recordType,
                 timestamp: new Date().toISOString()
             }
         );
+        
+        console.log('✅ IPFS Upload Successful!');
+        console.log('  - IPFS Hash:', result.ipfsHash);
+        console.log('  - File URL:', pinataService.getFileUrl(result.ipfsHash));
+        console.log('========================================\n');
         
         res.json({
             success: true,
@@ -150,7 +173,9 @@ router.post('/upload-package', async (req, res) => {
         });
         
     } catch (error) {
-        console.error('Upload package error:', error);
+        console.error('\n❌ Upload package error:', error.message);
+        console.error('Stack:', error.stack);
+        console.error('========================================\n');
         res.status(500).json({
             success: false,
             error: error.message
@@ -165,29 +190,61 @@ router.post('/upload-package', async (req, res) => {
  */
 router.get('/download-package/:ipfsHash', async (req, res) => {
     try {
+        console.log('\n========================================');
+        console.log('📥 PARTIAL SHARE DOWNLOAD REQUEST');
+        console.log('========================================');
+        
         const { ipfsHash } = req.params;
         
         if (!ipfsHash) {
+            console.log('❌ Missing IPFS hash');
             return res.status(400).json({
                 success: false,
                 error: 'IPFS hash required'
             });
         }
         
+        console.log('  - IPFS Hash:', ipfsHash);
+        console.log('⏳ Fetching from IPFS...');
+        
         // Fetch from IPFS
         const fileUrl = pinataService.getFileUrl(ipfsHash);
-        const axios = require('axios');
+        console.log('  - File URL:', fileUrl);
+        
         const response = await axios.get(fileUrl, {
-            timeout: 30000
+            timeout: 30000,
+            headers: {
+                'Accept': 'application/json'
+            }
         });
         
-        res.json({
-            success: true,
-            package: response.data
-        });
+        console.log('✅ Download Successful!');
+        console.log('  - Response type:', typeof response.data);
+        console.log('  - Response status:', response.status);
+        
+        // Check if response.data exists
+        if (!response.data) {
+            throw new Error('Empty response from IPFS');
+        }
+        
+        // Parse if it's a string
+        const packageData = typeof response.data === 'string' 
+            ? JSON.parse(response.data) 
+            : response.data;
+        
+        console.log('  - Package Size:', JSON.stringify(packageData).length, 'bytes');
+        console.log('  - Record Type:', packageData.recordType || 'NOT SET');
+        console.log('  - Merkle Root:', packageData.merkleRoot || 'NOT SET');
+        console.log('  - Attributes:', packageData.attributes ? Object.keys(packageData.attributes).join(', ') : 'NOT SET');
+        console.log('  - Proofs:', packageData.proofs ? Object.keys(packageData.proofs).join(', ') : 'NOT SET');
+        console.log('========================================\n');
+        
+        // Return raw JSON package (not wrapped in success object)
+        res.json(packageData);
         
     } catch (error) {
-        console.error('Download package error:', error);
+        console.error('\n❌ Download package error:', error.message);
+        console.error('========================================\n');
         res.status(500).json({
             success: false,
             error: error.message

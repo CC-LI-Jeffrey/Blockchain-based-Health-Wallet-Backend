@@ -1,0 +1,72 @@
+### Test Backend API Endpoints for Partial Sharing
+
+### 1. Build Merkle Tree
+POST http://localhost:3000/api/partial-share/build-tree
+Content-Type: application/json
+
+{
+  "recordType": "MEDICATION",
+  "fullData": {
+    "medicationName": "Aspirin",
+    "dosage": "100mg",
+    "frequency": "Once daily",
+    "prescribedBy": "Dr. Smith",
+    "startDate": "2026-01-01",
+    "endDate": "2026-12-31",
+    "purpose": "Pain relief",
+    "sideEffects": "None",
+    "pharmacy": "Local Pharmacy"
+  }
+}
+
+### 2. Generate Proofs (Partial Share)
+POST http://localhost:3000/api/partial-share/generate-proofs
+Content-Type: application/json
+
+{
+  "recordType": "MEDICATION",
+  "fullData": {
+    "medicationName": "Aspirin",
+    "dosage": "100mg",
+    "frequency": "Once daily",
+    "prescribedBy": "Dr. Smith",
+    "startDate": "2026-01-01",
+    "endDate": "2026-12-31",
+    "purpose": "Pain relief",
+    "sideEffects": "None",
+    "pharmacy": "Local Pharmacy"
+  },
+  "selectedAttributes": ["medicationName", "dosage", "frequency"]
+}
+
+### 3. Verify Proofs
+POST http://localhost:3000/api/partial-share/verify
+Content-Type: application/json
+
+{
+  "merkleRoot": "YOUR_MERKLE_ROOT_HERE",
+  "partialData": {
+    "medicationName": "Aspirin",
+    "dosage": "100mg"
+  },
+  "proofs": []
+}
+
+### 4. Upload Share Package to IPFS
+POST http://localhost:3000/api/partial-share/upload-package
+Content-Type: application/json
+
+{
+  "recordType": "MEDICATION",
+  "merkleRoot": "YOUR_MERKLE_ROOT_HERE",
+  "partialData": {
+    "medicationName": "Aspirin",
+    "dosage": "100mg"
+  },
+  "proofs": [],
+  "expiryTime": 1735689600,
+  "ownerAddress": "0x123..."
+}
+
+### 5. Download Share Package from IPFS
+GET http://localhost:3000/api/partial-share/download-package/YOUR_IPFS_HASH_HERE
