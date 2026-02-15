@@ -7,71 +7,52 @@
 
 module.exports = {
     PERSONAL_INFO: [
-        'fullName',
+        'firstName',
+        'lastName',
+        'email',
+        'hkid',
         'dateOfBirth',
         'gender',
         'bloodType',
+        'phone',
         'address',
-        'phoneNumber',
-        'email',
-        'emergencyContact',
-        'emergencyPhone',
-        'allergies',
-        'chronicConditions'
+        'emergencyContactName',
+        'emergencyContactRelationship',
+        'emergencyContactPhone'
     ],
     
     MEDICATION: [
         'medicineName',
         'dosage',
-        'prescribedBy',
+        'frequency',
+        'route',
         'startDate',
         'endDate',
-        'frequency',
         'purpose',
-        'sideEffects',
+        'prescribedBy',
         'pharmacy',
-        'prescriptionNumber',
-        'refillsRemaining',
-        'cost',
-        'insurance',
-        'notes',
-        'doctorPhone'
+        'notes'
     ],
     
     VACCINATION: [
+        'date',
         'vaccineName',
+        'vaccineNameEn',
+        'vaccineFullName',
         'manufacturer',
-        'lotNumber',
-        'doseNumber',
-        'totalDoses',
-        'vaccinationDate',
-        'administeredBy',
-        'facilityName',
-        'facilityAddress',
-        'nextDoseDate',
-        'reactions',
-        'certificateNumber',
-        'notes',
-        'boosterRequired'
+        'country',
+        'provider',
+        'location',
+        'batchNumber'
     ],
     
     MEDICAL_REPORT: [
-        'reportTitle',
+        'title',
         'reportType',
-        'reportDate',
-        'facilityName',
+        'reportTypeDisplay',
+        'date',
         'doctorName',
-        'doctorSpecialty',
-        'chiefComplaint',
-        'diagnosis',
-        'treatmentPlan',
-        'medications',
-        'labResults',
-        'imagingResults',
-        'vitalSigns',
-        'followUpDate',
-        'referrals',
-        'notes',
-        'billingCode'
+        'hospital',
+        'description'
     ]
 };

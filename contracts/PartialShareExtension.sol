@@ -188,7 +188,7 @@ contract PartialShareExtension {
                     accessList[j].isActive &&
                     accessList[j].expiryTime > block.timestamp) {
                     activeCount++;
-                    break; // Only count once per recordId
+                    // Count ALL active shares, not just one per recordId
                 }
             }
         }
@@ -216,7 +216,7 @@ contract PartialShareExtension {
                     merkleRoots[index] = accessList[j].merkleRoot;
                     expiryTimes[index] = accessList[j].expiryTime;
                     index++;
-                    break; // Only one active share per recordId
+                    // Continue to detect all shares, even multiple for the same recordId
                 }
             }
         }
