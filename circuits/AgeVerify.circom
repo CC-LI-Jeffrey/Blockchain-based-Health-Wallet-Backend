@@ -3,52 +3,102 @@ pragma circom 2.0.0;
 include "../node_modules/circomlib/circuits/comparators.circom";
 
 /*
- * AgeVerify circuit
+ * AgeVerify circuit — full date-aware (year + month + day)
  *
- * Private input: birthYear  — NEVER leaves the user's device
- * Public inputs: currentYear, minAge (always 18)
- * Output:        isAdult      (1 = age >= minAge, else proof fails)
+ * Private inputs:  birthYear, birthMonth, birthDay  — NEVER leave the device
+ * Public inputs:   currentYear, currentMonth, currentDay, minAge
+ * Output:          isAdult (1 = turned minAge on or before currentDate, else proof fails)
  *
- * The prover knows birthYear. The verifier only learns:
- *   - currentYear (e.g. 2026)
- *   - minAge      (18)
- *   - isAdult     (1)
- * They learn NOTHING about the actual birthYear.
+ * Algorithm:
+ *   yearDiff = currentYear - birthYear
+ *   if yearDiff > minAge  → adult (birthday already passed in a prior year)
+ *   if yearDiff == minAge → adult only if (currentMonth > birthMonth)
+ *                           OR  (currentMonth == birthMonth AND currentDay >= birthDay)
+ *   if yearDiff < minAge  → not adult
+ *
+ * The verifier learns: currentYear, currentMonth, currentDay, minAge, isAdult=1
+ * The verifier learns NOTHING about birthYear, birthMonth, or birthDay.
  */
 template AgeVerify() {
-    // Private input — kept secret
+    // ── Private inputs (secret)
     signal input birthYear;
+    signal input birthMonth;
+    signal input birthDay;
 
-    // Public inputs — revealed to verifier
+    // ── Public inputs (revealed to verifier)
     signal input currentYear;
+    signal input currentMonth;
+    signal input currentDay;
     signal input minAge;
 
-    // Public output
+    // ── Public output
     signal output isAdult;
 
-    // Compute age within the circuit
-    signal age;
-    age <== currentYear - birthYear;
+    // ── Step 1: year difference ──────────────────────────────────────
+    signal yearDiff;
+    yearDiff <== currentYear - birthYear;
 
-    // Constraint 1: age >= minAge  (e.g. age >= 18)
-    component gte = GreaterEqThan(8);  // 8 bits supports values 0-255
-    gte.in[0] <== age;
-    gte.in[1] <== minAge;
+    // yearDiff > minAge  (strictly over — birthday was in a previous year)
+    component gtAge = GreaterThan(8);   // 8 bits covers 0-255
+    gtAge.in[0] <== yearDiff;
+    gtAge.in[1] <== minAge;
 
-    // Constraint 2: age < 150  (sanity: no one is 150+ years old)
-    component lt = LessThan(8);
-    lt.in[0] <== age;
-    lt.in[1] <== 150;
+    // yearDiff >= minAge
+    component gteAge = GreaterEqThan(8);
+    gteAge.in[0] <== yearDiff;
+    gteAge.in[1] <== minAge;
 
-    // Both constraints must be satisfied
+    // yearDiff == minAge  ⟺  (>= AND NOT >)
+    signal exactAge;
+    exactAge <== gteAge.out * (1 - gtAge.out);
+
+    // ── Step 2: has birthday been reached this year? ─────────────────
+
+    // currentMonth > birthMonth
+    component monthGt = GreaterThan(4);   // 4 bits covers 1-12
+    monthGt.in[0] <== currentMonth;
+    monthGt.in[1] <== birthMonth;
+
+    // currentMonth == birthMonth
+    component monthEq = IsEqual();
+    monthEq.in[0] <== currentMonth;
+    monthEq.in[1] <== birthMonth;
+
+    // currentDay >= birthDay
+    component dayGte = GreaterEqThan(5);  // 5 bits covers 1-31
+    dayGte.in[0] <== currentDay;
+    dayGte.in[1] <== birthDay;
+
+    // same month AND day has passed
+    signal sameMonthDayPassed;
+    sameMonthDayPassed <== monthEq.out * dayGte.out;
+
+    // birthdayReached = monthGt OR sameMonthDayPassed
+    // Boolean OR without conditionals: a + b - a*b
+    signal birthdayReached;
+    birthdayReached <== monthGt.out + sameMonthDayPassed - monthGt.out * sameMonthDayPassed;
+
+    // ── Step 3: combine into isAdult ─────────────────────────────────
+
+    // adult if (yearDiff > minAge) OR (yearDiff == minAge AND birthdayReached)
+    signal exactAndBirthday;
+    exactAndBirthday <== exactAge * birthdayReached;
+
+    signal isAdultVal;
+    isAdultVal <== gtAge.out + exactAndBirthday - gtAge.out * exactAndBirthday;
+
+    // Sanity: yearDiff < 150  (no one is 150+ years old)
+    component ltMax = LessThan(8);
+    ltMax.in[0] <== yearDiff;
+    ltMax.in[1] <== 150;
+
     signal bothValid;
-    bothValid <== gte.out * lt.out;
+    bothValid <== isAdultVal * ltMax.out;
 
-    // isAdult must equal 1 — proof is invalid if 0
     isAdult <== bothValid;
     isAdult === 1;
 }
 
-// Public signals: currentYear and minAge are visible to verifier
-// birthYear stays private
-component main { public [currentYear, minAge] } = AgeVerify();
+// Public signals order in proof: [isAdult, currentYear, currentMonth, currentDay, minAge]
+// birthYear, birthMonth, birthDay stay private
+component main { public [currentYear, currentMonth, currentDay, minAge] } = AgeVerify();
