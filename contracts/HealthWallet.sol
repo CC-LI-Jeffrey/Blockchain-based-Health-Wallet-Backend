@@ -80,6 +80,13 @@ contract HealthWallet is Ownable, AccessControl {
     // recordId => AuditLog[]
     mapping(uint256 => AuditLog[]) private auditLogs;
     
+    // Track vaccine commitments for QR verification
+    // user => array of Poseidon(vaccinationId, vaccineCode, salt) commitments
+    mapping(address => bytes32[]) public vaccineCommitments;
+    
+    // user => commitment => timestamp (for verification anchor)
+    mapping(address => mapping(bytes32 => uint256)) public commitmentTimestamps;
+    
     // ============================================
     // EVENTS
     // ============================================
@@ -92,6 +99,7 @@ contract HealthWallet is Ownable, AccessControl {
     event ProviderRevoked(address indexed provider);
     event EmergencyContactSet(address indexed patient, address indexed emergencyContact);
     event AccessLogged(uint256 indexed recordId, address indexed accessor, AuditAction action);
+    event VaccineCommitmentRegistered(address indexed user, bytes32 indexed commitment, uint256 timestamp);
     
     // ============================================
     // CONSTRUCTOR
@@ -381,5 +389,78 @@ contract HealthWallet is Ownable, AccessControl {
         );
         
         return auditLogs[_recordId];
+    }
+
+    // ============================================
+    // VACCINE COMMITMENT FUNCTIONS (for QR verification)
+    // ============================================
+
+    /**
+     * @dev Register a vaccine commitment for this user
+     * Called when user uploads/creates a vaccination record
+     * commitment = Poseidon(vaccinationId, vaccineCode, salt)
+     * 
+     * @param _commitment The Poseidon hash commitment of vaccine details
+     * @return success Whether the commitment was registered
+     */
+    function registerVaccineCommitment(bytes32 _commitment) external returns (bool) {
+        require(_commitment != bytes32(0), "Invalid commitment");
+        
+        // Add commitment to user's list
+        vaccineCommitments[msg.sender].push(_commitment);
+        
+        // Store timestamp for anchor verification
+        commitmentTimestamps[msg.sender][_commitment] = block.timestamp;
+        
+        emit VaccineCommitmentRegistered(msg.sender, _commitment, block.timestamp);
+        
+        return true;
+    }
+
+    /**
+     * @dev Check if a vaccine commitment exists for a user (anchored on-chain)
+     * Used by verifier scanning a vaccine QR code
+     * 
+     * @param _user The user who issued the vaccine proof
+     * @param _commitment The commitment being verified
+     * @return exists Whether the commitment is registered
+     * @return timestamp When it was registered
+     */
+    function hasVaccineCommitment(address _user, bytes32 _commitment) 
+        external 
+        view 
+        returns (bool exists, uint256 timestamp) 
+    {
+        timestamp = commitmentTimestamps[_user][_commitment];
+        exists = timestamp > 0;
+        return (exists, timestamp);
+    }
+
+    /**
+     * @dev Get all vaccine commitments for a user
+     * 
+     * @param _user The user to check
+     * @return Array of all registered commitments
+     */
+    function getUserVaccineCommitments(address _user) 
+        external 
+        view 
+        returns (bytes32[] memory) 
+    {
+        return vaccineCommitments[_user];
+    }
+
+    /**
+     * @dev Count of vaccine commitments for a user
+     * 
+     * @param _user The user to check
+     * @return Number of registered vaccine commitments
+     */
+    function getVaccineCommitmentCount(address _user) 
+        external 
+        view 
+        returns (uint256) 
+    {
+        return vaccineCommitments[_user].length;
     }
 }
