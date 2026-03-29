@@ -223,6 +223,18 @@ contract HealthWalletV2_05 is Ownable, AccessControl, ReentrancyGuard, Pausable 
         uint256 expiresAt;             // Optional expiration date (0 = never expires)
     }
 
+    /**
+     * @dev Age proof anchor (one-step model)
+     */
+    struct AgeProofAnchor {
+        uint256 minAge;
+        uint256 commitment;
+        bool isVerified;
+        bytes32 proofHash;
+        uint256 proofSubmittedAt;
+        uint256 updatedAt;
+    }
+
     // ============================================
     // STATE VARIABLES
     // ============================================
@@ -279,6 +291,9 @@ contract HealthWalletV2_05 is Ownable, AccessControl, ReentrancyGuard, Pausable 
     // Track which vaccines have commitments for a user (for quick lookup)
     mapping(address => mapping(uint256 => bool)) private userHasVaccine;
 
+    // User Address => Age proof anchor
+    mapping(address => AgeProofAnchor) private ageProofAnchors;
+
     // ============================================
     // EVENTS
     // ============================================
@@ -331,6 +346,14 @@ contract HealthWalletV2_05 is Ownable, AccessControl, ReentrancyGuard, Pausable 
     event VaccineProofSubmitted(
         address indexed user,
         uint256 indexed vaccineCode,
+        bytes32 proofHash,
+        uint256 timestamp
+    );
+
+    event AgeProofSubmitted(
+        address indexed user,
+        uint256 minAge,
+        uint256 commitment,
         bytes32 proofHash,
         uint256 timestamp
     );
@@ -1102,6 +1125,89 @@ contract HealthWalletV2_05 is Ownable, AccessControl, ReentrancyGuard, Pausable 
 
         emit VaccineProofSubmitted(msg.sender, _vaccineCode, _proofHash, block.timestamp);
         return true;
+    }
+
+    /**
+     * @dev One-step vaccine anchor model: registers/updates commitment and marks proof verified in one tx.
+     * @param _vaccineCode Vaccine code
+     * @param _commitment Poseidon commitment
+     * @param _proofHash Hash of the ZK proof
+     */
+    function submitVaccineProof(
+        uint256 _vaccineCode,
+        uint256 _commitment,
+        bytes32 _proofHash
+    ) external whenNotPaused onlyPersonalInfoOwner returns (bool) {
+        require(_vaccineCode <= 15, "Invalid vaccine code");
+        require(_commitment != 0, "Invalid commitment");
+        require(_proofHash != bytes32(0), "Invalid proof hash");
+
+        if (!userHasVaccine[msg.sender][_vaccineCode]) {
+            userVaccineCodes[msg.sender].push(_vaccineCode);
+            userHasVaccine[msg.sender][_vaccineCode] = true;
+        }
+
+        VaccineCommitment storage commitmentRef = vaccineCommitments[msg.sender][_vaccineCode];
+
+        if (commitmentRef.registeredAt == 0) {
+            commitmentRef.vaccineCode = _vaccineCode;
+            commitmentRef.registeredAt = block.timestamp;
+            commitmentRef.expiresAt = 0;
+        }
+
+        commitmentRef.commitment = _commitment;
+        commitmentRef.isVerified = true;
+        commitmentRef.proofHash = _proofHash;
+        commitmentRef.proofSubmittedAt = block.timestamp;
+
+        emit VaccineCommitmentRegistered(msg.sender, _vaccineCode, _commitment, block.timestamp);
+        emit VaccineProofSubmitted(msg.sender, _vaccineCode, _proofHash, block.timestamp);
+        return true;
+    }
+
+    /**
+     * @dev One-step age anchor model.
+     * @param _minAge Proved minimum age threshold (e.g., 18)
+     * @param _commitment Commitment/hash related to the locally generated proof
+     * @param _proofHash Hash of ZK proof payload
+     */
+    function submitAgeProof(
+        uint256 _minAge,
+        uint256 _commitment,
+        bytes32 _proofHash
+    ) external whenNotPaused onlyPersonalInfoOwner returns (bool) {
+        require(_minAge >= 18 && _minAge <= 120, "Invalid min age");
+        require(_commitment != 0, "Invalid commitment");
+        require(_proofHash != bytes32(0), "Invalid proof hash");
+
+        ageProofAnchors[msg.sender] = AgeProofAnchor({
+            minAge: _minAge,
+            commitment: _commitment,
+            isVerified: true,
+            proofHash: _proofHash,
+            proofSubmittedAt: block.timestamp,
+            updatedAt: block.timestamp
+        });
+
+        emit AgeProofSubmitted(msg.sender, _minAge, _commitment, _proofHash, block.timestamp);
+        return true;
+    }
+
+    /**
+     * @dev Returns true when user has an anchored age proof with minAge >= 18.
+     */
+    function checkAdultStatus(address _user) external view returns (bool) {
+        AgeProofAnchor memory anchor = ageProofAnchors[_user];
+        return anchor.isVerified && anchor.commitment != 0 && anchor.minAge >= 18;
+    }
+
+    /**
+     * @dev Returns age verification status and latest anchor timestamp.
+     */
+    function getVerificationDetails(address _user) external view returns (bool, uint256) {
+        AgeProofAnchor memory anchor = ageProofAnchors[_user];
+        bool isAdult = anchor.isVerified && anchor.commitment != 0 && anchor.minAge >= 18;
+        return (isAdult, anchor.proofSubmittedAt);
     }
 
     /**
