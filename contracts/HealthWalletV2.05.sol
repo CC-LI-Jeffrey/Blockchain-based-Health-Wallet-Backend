@@ -1211,6 +1211,21 @@ contract HealthWalletV2_05 is Ownable, AccessControl, ReentrancyGuard, Pausable 
     }
 
     /**
+     * @dev Returns the latest anchored age proof hash for a user (bytes32(0) if none).
+     */
+    function getAgeProofHash(address _user) external view returns (bytes32) {
+        return ageProofAnchors[_user].proofHash;
+    }
+
+    /**
+     * @dev Returns latest anchored vaccine proof hash for a user and vaccine code.
+     *      Returns bytes32(0) if no proof was anchored.
+     */
+    function getVaccineProofHash(address _user, uint256 _vaccineCode) external view returns (bytes32) {
+        return vaccineCommitments[_user][_vaccineCode].proofHash;
+    }
+
+    /**
      * @dev Get vaccine commitment for a user
      * @param _user Address of the user
      * @param _vaccineCode Vaccine code
