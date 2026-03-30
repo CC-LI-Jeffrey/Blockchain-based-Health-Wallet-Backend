@@ -40,7 +40,6 @@ app.get('/health', (req, res) => {
 // API routes
 app.use('/api/ipfs', require('./routes/ipfs'));
 app.use('/api/partial-share', require('./routes/partialShare'));
-app.use('/api/zkp', require('./routes/zkp'));
 
 // Error handling
 
