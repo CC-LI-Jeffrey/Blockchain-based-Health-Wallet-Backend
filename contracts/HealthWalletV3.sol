@@ -22,7 +22,7 @@ import "@openzeppelin/contracts/utils/Pausable.sol";
  * - Minimal metadata on-chain (timestamps, types, IDs)
  * - Access control via blockchain, data retrieval via IPFS
  */
-contract HealthWalletV2_05 is Ownable, AccessControl, ReentrancyGuard, Pausable {
+contract HealthWalletV3 is Ownable, AccessControl, ReentrancyGuard, Pausable {
 
     // ============================================
     // ROLES
