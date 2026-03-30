@@ -7,11 +7,11 @@ import "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
 import "@openzeppelin/contracts/utils/Pausable.sol";
 
 /**
- * @title HealthWalletV2.05
+ * @title HealthWalletV3
  * @dev Privacy-focused health record management - ALL sensitive data encrypted and stored off-chain
  * @notice Only metadata and encrypted IPFS hashes stored on-chain for maximum privacy
  *
- * VERSION 2.05 CHANGES:
+ * VERSION 3 CHANGES:
  * - Added encryptedKey field to MedicalReportRef for per-record random key encryption
  * - Updated addReport and updateReport functions to accept encryptedKey parameter
  *
