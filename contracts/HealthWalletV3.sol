@@ -747,6 +747,7 @@ contract HealthWalletV3 is Ownable, AccessControl, ReentrancyGuard, Pausable {
         reportOwner[newId] = msg.sender;
         userReportIds[msg.sender].push(newId);
 
+        // Emit metadata-only event so clients can track new reports without reading/decrypting IPFS payloads.
         emit ReportAdded(msg.sender, newId, _reportType, _encryptedDataIpfsHash);
         return newId;
     }

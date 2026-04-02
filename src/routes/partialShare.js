@@ -129,7 +129,7 @@ router.post('/upload-package', async (req, res) => {
         const { sharePackage } = req.body;
         
         if (!sharePackage) {
-            console.log('❌ Missing sharePackage in request body');
+            console.log(' Missing sharePackage in request body');
             return res.status(400).json({
                 success: false,
                 error: 'Missing sharePackage'
@@ -161,7 +161,7 @@ router.post('/upload-package', async (req, res) => {
             }
         );
         
-        console.log('✅ IPFS Upload Successful!');
+        console.log(' IPFS Upload Successful!');
         console.log('  - IPFS Hash:', result.ipfsHash);
         console.log('  - File URL:', pinataService.getFileUrl(result.ipfsHash));
         console.log('========================================\n');
